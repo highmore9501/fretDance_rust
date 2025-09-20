@@ -1,0 +1,12 @@
+[package]
+name = "fret_dance_rust"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+midly = "0.5"
+rand = "0.8"
+lazy_static = "1.4"
+ndarray = "0.16.1"
+serde_json = "1.0.145"
+serde = {version = "1.0.224",features = ["derive"]}
