@@ -2,68 +2,81 @@ use std::f64;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Quaternion {
+    pub w: f64,
     pub x: f64,
     pub y: f64,
     pub z: f64,
-    pub w: f64,
 }
 
 impl Quaternion {
-    pub fn new(x: f64, y: f64, z: f64, w: f64) -> Self {
-        Quaternion { x, y, z, w }
+    pub fn new(w: f64, x: f64, y: f64, z: f64) -> Self {
+        Quaternion { w, x, y, z }
     }
 
     pub fn norm(&self) -> f64 {
-        (self.x * self.x + self.y * self.y + self.z * self.z + self.w * self.w).sqrt()
+        (self.w * self.w + self.x * self.x + self.y * self.y + self.z * self.z).sqrt()
     }
 
     pub fn normalize(&self) -> Quaternion {
         let norm = self.norm();
         Quaternion {
+            w: self.w / norm,
             x: self.x / norm,
             y: self.y / norm,
             z: self.z / norm,
-            w: self.w / norm,
         }
     }
 
     pub fn dot(&self, other: &Quaternion) -> f64 {
-        self.x * other.x + self.y * other.y + self.z * other.z + self.w * other.w
+        self.w * other.w + self.x * other.x + self.y * other.y + self.z * other.z
     }
 
     pub fn scale(&self, scalar: f64) -> Quaternion {
         Quaternion {
+            w: self.w * scalar,
             x: self.x * scalar,
             y: self.y * scalar,
             z: self.z * scalar,
-            w: self.w * scalar,
         }
     }
 
     pub fn add(&self, other: &Quaternion) -> Quaternion {
         Quaternion {
+            w: self.w + other.w,
             x: self.x + other.x,
             y: self.y + other.y,
             z: self.z + other.z,
-            w: self.w + other.w,
         }
     }
 
     pub fn subtract(&self, other: &Quaternion) -> Quaternion {
         Quaternion {
+            w: self.w - other.w,
             x: self.x - other.x,
             y: self.y - other.y,
             z: self.z - other.z,
-            w: self.w - other.w,
         }
     }
 
     pub fn negate(&self) -> Quaternion {
         Quaternion {
+            w: -self.w,
             x: -self.x,
             y: -self.y,
             z: -self.z,
-            w: -self.w,
+        }
+    }
+
+    pub fn to_vector64(&self) -> Vec<f64> {
+        return vec![self.w, self.x, self.y, self.z];
+    }
+
+    pub fn from_vector64(vector: Vec<f64>) -> Quaternion {
+        Quaternion {
+            w: vector[0],
+            x: vector[1],
+            y: vector[2],
+            z: vector[3],
         }
     }
 }
@@ -115,10 +128,10 @@ pub fn slerp(q1: &Quaternion, q2: &Quaternion, t_tan: f64) -> Quaternion {
 
 fn all_close(q1: Quaternion, q2: Quaternion) -> bool {
     const EPSILON: f64 = 1e-9;
-    (q1.x - q2.x).abs() < EPSILON
+    (q1.w - q2.w).abs() < EPSILON
+        && (q1.x - q2.x).abs() < EPSILON
         && (q1.y - q2.y).abs() < EPSILON
         && (q1.z - q2.z).abs() < EPSILON
-        && (q1.w - q2.w).abs() < EPSILON
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -131,6 +144,18 @@ pub struct Vector3 {
 impl Vector3 {
     pub fn new(x: f64, y: f64, z: f64) -> Self {
         Vector3 { x, y, z }
+    }
+
+    pub fn from_vector64(vector: Vec<f64>) -> Vector3 {
+        Vector3 {
+            x: vector[0],
+            y: vector[1],
+            z: vector[2],
+        }
+    }
+
+    pub fn to_vector64(&self) -> Vec<f64> {
+        vec![self.x, self.y, self.z]
     }
 
     pub fn subtract(&self, other: &Vector3) -> Vector3 {

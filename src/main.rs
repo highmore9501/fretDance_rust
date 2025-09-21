@@ -6,6 +6,7 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 
+use crate::animate::animator::Animator;
 use crate::guitar::guitar_instance::Guitar;
 use crate::guitar::guitar_string::create_guitar_strings;
 use crate::hand::left_finger::LeftFinger;
@@ -181,30 +182,31 @@ fn main() {
             println!("总音符数应该为{}", total_steps);
             println!("实际输出音符数为{}", best_hand_pose_record.len());
 
+            let animator = Animator::new(
+                avatar.to_string(),
+                left_hand_recorder_file.to_string(),
+                left_hand_animation_file.to_string(),
+                fps,
+                max_string_index as f64,
+            )?;
+
             // 如果有推弦动作，添加推弦动作
             if !pitch_wheel_map.is_empty() {
-                add_pitchwheel(&left_hand_recorder_file, &pitch_wheel_map)?;
+                animator.add_pitchwheel(&left_hand_recorder_file, &pitch_wheel_map)?;
             }
 
-            left_hand_2_animation(
-                avatar,
-                &left_hand_recorder_file,
-                &left_hand_animation_file,
-                fps,
-                max_string_index as i32,
-                false,
-            )?;
+            animator.left_hand_2_animation(false)?;
 
             // 处理右手部分
             println!("开始生成右手演奏数据");
 
             if avatar.ends_with("_E") {
-                left_hand_2_electronic_right_hand(
+                animator.left_hand_2_electronic_right_hand(
                     &left_hand_recorder_file,
                     &right_hand_recorder_file,
                 )?;
 
-                electronic_right_hand_2_animation(
+                animator.electronic_right_hand_2_animation(
                     avatar,
                     &right_hand_recorder_file,
                     &right_hand_animation_file,
@@ -248,7 +250,7 @@ fn main() {
                     fps,
                 )?;
 
-                right_hand_2_animation(
+                animator.right_hand_2_animation(
                     avatar,
                     &right_hand_recorder_file,
                     &right_hand_animation_file,
@@ -258,7 +260,11 @@ fn main() {
             }
 
             println!("开始生成吉他弦动画数据");
-            animated_guitar_string(&left_hand_recorder_file, &guitar_string_recorder_file, fps)?;
+            animator.animated_guitar_string(
+                &left_hand_recorder_file,
+                &guitar_string_recorder_file,
+                fps,
+            )?;
 
             let final_info = format!(
                 "全部执行完毕:\nrecorder文件被保存到了:{} 和 {}\n动画文件被保存到了:{} 和 {}\n吉它弦动画文件被保存到了:{}",
@@ -272,70 +278,6 @@ fn main() {
             println!("{}", final_info);
             Ok(final_info)
         }
-    }
-
-    fn add_pitchwheel(
-        file_path: &str,
-        pitch_wheel_map: &Vec<PitchWheelInfo>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        // 实现添加推弦逻辑
-        todo! {"这个应该写在animate 模块中"}
-        Ok(())
-    }
-
-    fn left_hand_2_animation(
-        avatar: &str,
-        recorder_file: &str,
-        animation_file: &str,
-        fps: f64,
-        max_string_index: i32,
-        is_electric: bool,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        // 实现左手动画转换逻辑
-        todo! {"这个应该写在animate 模块中"}
-        Ok(())
-    }
-
-    fn left_hand_2_electronic_right_hand(
-        left_hand_recorder_file: &str,
-        right_hand_recorder_file: &str,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        // 实现左手转电子右手逻辑
-        todo! {"这个应该写在animate 模块中"}
-        Ok(())
-    }
-
-    fn electronic_right_hand_2_animation(
-        avatar: &str,
-        recorder_file: &str,
-        animation_file: &str,
-        fps: f64,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        // 实现电子右手动画转换逻辑
-        todo! {"这个应该写在animate 模块中"}
-        Ok(())
-    }
-
-    fn right_hand_2_animation(
-        avatar: &str,
-        recorder_file: &str,
-        animation_file: &str,
-        fps: f64,
-        max_string_index: i32,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        // 实现右手动画转换逻辑
-        todo! {"这个应该写在animate 模块中"}
-        Ok(())
-    }
-
-    fn animated_guitar_string(
-        recorder_file: &str,
-        string_recorder_file: &str,
-        fps: f64,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        // 实现吉他弦动画逻辑
-        todo! {"这个应该写在animate 模块中"}
-        Ok(())
     }
 
     // 主函数

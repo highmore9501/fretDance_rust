@@ -357,7 +357,7 @@ impl LeftHand {
         let mut finger_touch_string_counter = vec![0; 5];
 
         // 用于计算下一个手型把位的值，一开始它是统计的最低手指所按的品，统计完以后再根据情况来计算
-        let mut new_hand_position = 0;
+        let new_hand_position;
 
         // 第一次循环，处理空弦音，并且计算各个手指的触弦总数,更新最高和最低按弦索引，更新使用的手指索引
         for finger_position in finger_positions {
@@ -483,7 +483,7 @@ impl LeftHand {
 
             // 检测旧位置是否在现在横按的情况下可用
             let mut finger_can_keep = true;
-            for (barre_finger_index, (barre_fret, barre_string_index_val)) in &barre_finger_dict {
+            for (_barre_finger_index, (barre_fret, barre_string_index_val)) in &barre_finger_dict {
                 if old_fret <= *barre_fret || old_string_index > *barre_string_index_val {
                     finger_can_keep = false;
                     break;
@@ -497,7 +497,8 @@ impl LeftHand {
             }
 
             // 检测旧位置是否与当前按的位置有重合
-            for (pressed_finger_index, (pressed_fret, pressed_string_index)) in &pressed_finger_dict
+            for (_pressed_finger_index, (pressed_fret, pressed_string_index)) in
+                &pressed_finger_dict
             {
                 if old_fret == *pressed_fret && old_string_index == *pressed_string_index {
                     finger_can_keep = false;
@@ -549,9 +550,9 @@ impl LeftHand {
             // 这是默认休息的弦索引，其实就是所有已经按弦弦索引的中位点
             let default_rest_string_index = if !used_string_index_set.is_empty() {
                 if new_hand_position < 17 {
-                    ((*used_string_index_set.iter().min().unwrap()
+                    (*used_string_index_set.iter().min().unwrap()
                         + *used_string_index_set.iter().max().unwrap())
-                        / 2)
+                        / 2
                 } else {
                     0
                 }

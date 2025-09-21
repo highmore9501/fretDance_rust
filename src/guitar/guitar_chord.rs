@@ -1,4 +1,5 @@
 use crate::guitar::guitar_instance::Guitar;
+use std::collections::HashSet;
 
 #[derive(Debug, Clone)]
 pub struct Chord {
@@ -30,10 +31,8 @@ impl Chord {
 
     pub fn has_duplicate_strings(&self) -> bool {
         let string_indices = self.get_string_indices();
-        let unique_count = string_indices
-            .iter()
-            .collect::<std::collections::HashSet<_>>()
-            .len();
+        let unique_count: HashSet<_> = string_indices.iter().collect();
+        let unique_count: usize = unique_count.len();
         string_indices.len() != unique_count
     }
 
@@ -48,7 +47,8 @@ impl Chord {
         }
 
         // 四个手指按不下超过4个不同的fret
-        let unique_frets_count = frets.iter().collect::<std::collections::HashSet<_>>().len();
+        let unique_frets_count: HashSet<_> = frets.iter().collect();
+        let unique_frets_count: usize = unique_frets_count.len();
         if unique_frets_count > 4 {
             return false;
         }

@@ -1,3 +1,4 @@
+pub mod animate;
 pub mod guitar;
 pub mod hand;
 pub mod midi;
