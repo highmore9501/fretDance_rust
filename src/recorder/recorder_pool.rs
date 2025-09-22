@@ -448,27 +448,223 @@ impl HandPoseRecordPool {
     }
 
     /// 生成右手记录器
+    /// 生成右手记录器
     pub fn generate_right_hand_recorder(
         &mut self,
-        item: &serde_json::Value, // 需要定义合适的结构体
-        current_recorder_num: usize,
-        previous_recorder_num: usize,
+        item: &serde_json::Value,
+        mut current_recorder_num: usize,
+        mut previous_recorder_num: usize,
         max_string_index: usize,
     ) {
-        // 这里需要实现原始generateRightHandRecoder的逻辑
-        todo!("需要实现generate_right_hand_recorder的具体逻辑")
-    }
+        // 获取real_tick
+        let real_tick = match item.get("real_tick").and_then(|v| v.as_f64()) {
+            Some(tick) => tick,
+            None => return,
+        };
 
+        // 获取leftHand数组
+        let left_hand = match item.get("leftHand").and_then(|v| v.as_array()) {
+            Some(hand) => hand,
+            None => return,
+        };
+
+        let mut touched_strings = Vec::new();
+        let mut lower_strings = Vec::new();
+
+        // 遍历手指信息
+        for finger in left_hand {
+            if let Some(finger_obj) = finger.as_object() {
+                let finger_index = finger_obj
+                    .get("fingerIndex")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(-1);
+                if let Some(finger_info) = finger_obj.get("fingerInfo").and_then(|v| v.as_object())
+                {
+                    let press = finger_info
+                        .get("press")
+                        .and_then(|v| v.as_f64())
+                        .unwrap_or(0.0);
+                    let string_index = finger_info
+                        .get("stringIndex")
+                        .and_then(|v| v.as_i64())
+                        .unwrap_or(0);
+
+                    // 如果是无效手指索引或者按压力度在0到5之间（不包括0和5）
+                    if finger_index == -1 || (press > 0.0 && press < 5.0) {
+                        touched_strings.push(string_index as i32);
+                        if string_index > 2 {
+                            lower_strings.push(string_index as i32);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 如果没有触摸的弦，直接返回
+        if touched_strings.is_empty() {
+            return;
+        }
+
+        self.ready_for_record();
+
+        // 去重
+        touched_strings.sort_unstable();
+        touched_strings.dedup();
+
+        // 从高到低排序
+        touched_strings.sort_unstable_by(|a, b| b.cmp(a));
+
+        // 判断是否允许p指弹两根弦
+        let allow_double_p = max_string_index > 3 && lower_strings.len() > 1;
+        let all_fingers = if allow_double_p {
+            vec![
+                "p".to_string(),
+                "p".to_string(),
+                "i".to_string(),
+                "m".to_string(),
+                "a".to_string(),
+            ]
+        } else {
+            vec![
+                "p".to_string(),
+                "i".to_string(),
+                "m".to_string(),
+                "a".to_string(),
+            ]
+        };
+
+        let all_strings: Vec<i32> = (0..=max_string_index as i32).collect();
+
+        // 生成可能的右手组合
+        let possible_combinations = crate::hand::right_hand::generate_possible_right_hands(
+            touched_strings.clone(),
+            all_fingers,
+            all_strings,
+        );
+
+        if possible_combinations.is_empty() {
+            println!(
+                "当前要拨动的弦是{:?}，没有找到合适的右手拨法。",
+                touched_strings
+            );
+            return;
+        }
+
+        // 收集所有需要添加的新记录器，避免在遍历过程中修改self.recorders
+        let mut new_recorders = Vec::new();
+
+        // 遍历所有可能的组合和预记录器
+        for combination in &possible_combinations {
+            for pre_recorder in &self.pre_recorders {
+                if let HandRecorder::Right(right_recorder) = pre_recorder {
+                    if let Some(last_hand) = right_recorder.hand_pose_list.last() {
+                        let used_fingers = match combination.get("usedFingers") {
+                            Some(fingers) => match fingers.as_array() {
+                                Some(arr) => arr
+                                    .iter()
+                                    .map(|v| v.as_str().unwrap_or("").to_string())
+                                    .collect(),
+                                None => Vec::new(),
+                            },
+                            None => Vec::new(),
+                        };
+
+                        let right_finger_positions = match combination.get("rightFingerPositions") {
+                            Some(positions) => match positions.as_array() {
+                                Some(arr) => {
+                                    arr.iter().map(|v| v.as_i64().unwrap_or(0) as i32).collect()
+                                }
+                                None => vec![5, 4, 3, 2],
+                            },
+                            None => vec![5, 4, 3, 2],
+                        };
+
+                        // 验证右手姿势
+                        let is_valid = last_hand.validate_right_hand(
+                            Some(used_fingers.clone()),
+                            Some(right_finger_positions.clone()),
+                        );
+
+                        if !is_valid {
+                            continue;
+                        }
+
+                        let is_arpeggio = used_fingers.is_empty();
+                        let is_playing_bass = false; // 根据上下文，这里可能需要更准确的判断
+                        let right_hand = RightHand::new(
+                            used_fingers.clone(),
+                            right_finger_positions.clone(),
+                            last_hand.used_fingers.clone(),
+                            is_arpeggio,
+                            is_playing_bass,
+                        );
+
+                        let entropy = last_hand.calculate_diff(&right_hand);
+                        let new_entropy = right_recorder.current_entropy + entropy;
+
+                        // 创建新的记录器
+                        let mut new_recorder = RightHandRecorder::new();
+                        new_recorder.hand_pose_list = right_recorder.hand_pose_list.clone();
+                        new_recorder.hand_pose_list.push(right_hand);
+                        new_recorder.current_entropy = new_entropy;
+                        new_recorder.entropies = right_recorder.entropies.clone();
+                        new_recorder.entropies.push(new_entropy);
+                        new_recorder.real_ticks = right_recorder.real_ticks.clone();
+                        new_recorder.real_ticks.push(real_tick);
+
+                        new_recorders.push(new_recorder);
+                    }
+                }
+            }
+        }
+
+        // 统一添加所有新记录器
+        for new_recorder in new_recorders {
+            self.add_right_recorder(new_recorder);
+        }
+
+        previous_recorder_num = current_recorder_num;
+        current_recorder_num = self.recorders.len();
+
+        if current_recorder_num < previous_recorder_num {
+            println!(
+                "当前record数量是{}，上一次record数量是{}",
+                current_recorder_num, previous_recorder_num
+            );
+        }
+    }
     /// 更新右手记录器池
     pub fn update_right_hand_recorder_pool(
         &mut self,
         left_hand_recorder_file: &str,
-        current_recorder_num: usize,
-        previous_recorder_num: usize,
+        mut current_recorder_num: usize,
+        mut previous_recorder_num: usize,
         max_string_index: usize,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        // 这里需要实现原始update_right_hand_recorder_pool的逻辑
-        todo!("需要实现update_right_hand_recorder_pool的具体逻辑")
+        // 读取左手记录文件
+        let file = File::open(left_hand_recorder_file)?;
+        let reader = BufReader::new(file);
+        let data: Vec<serde_json::Value> = serde_json::from_reader(reader)?;
+
+        let total_steps = data.len();
+        current_recorder_num = 0;
+        previous_recorder_num = current_recorder_num;
+
+        // 遍历数据处理（将来可以在这里添加 eGui 进度条更新逻辑）
+        for i in 0..total_steps {
+            let item = &data[i];
+            self.generate_right_hand_recorder(
+                item,
+                current_recorder_num,
+                previous_recorder_num,
+                max_string_index,
+            );
+
+            // 将来在这里添加 eGui 进度条更新代码
+            // 例如: egui_progress_bar.set_progress(i, total_steps);
+        }
+
+        Ok(())
     }
 
     /// 获取当前池子的长度

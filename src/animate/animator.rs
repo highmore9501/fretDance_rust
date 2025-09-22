@@ -7,7 +7,8 @@ use std::io::BufReader;
 
 use crate::midi::midi_to_note::PitchWheelInfo;
 use crate::utils::util_methods::{
-    Quaternion, Vector3, lerp_by_fret_quaternion, lerp_by_fret_vector3, slerp,
+    Quaternion, Vector3, add_vectors, get_string_touch_position, lerp_by_fret_quaternion,
+    lerp_by_fret_vector3, scale_vector, slerp, subtract_vectors, vector_norm,
 };
 
 /// 左手手指索引字典常量
@@ -16,6 +17,14 @@ const LEFT_FINGER_INDEX_DICT: [(i32, &str); 4] = [
     (2, "M_L"), // 中指
     (3, "R_L"), // 无名指
     (4, "P_L"), // 小指
+];
+
+/// 右手手指索引字典常量
+const RIGHT_FINGER_INDEX_DICT: [(&str, usize); 4] = [
+    ("p", 0), // 拇指
+    ("i", 1), // 食指
+    ("m", 2), // 中指
+    ("a", 3), // 无名指
 ];
 
 /// 动画生成器，用于根据指法数据生成左手和右手动画
@@ -367,27 +376,197 @@ impl Animator {
         &self,
         left_hand_recorder_file: &str,
         right_hand_recorder_file: &str,
-    ) -> Result<(), Box<dyn Error>> {
-        // 实现左手转电子右手逻辑
-        todo!("这个应该写在animate 模块中")
+    ) -> Result<Vec<Value>, Box<dyn Error>> {
+        // 读取左手记录文件
+        let file = File::open(left_hand_recorder_file)?;
+        let reader = BufReader::new(file);
+        let data: Vec<Value> = serde_json::from_reader(reader)?;
+        let total_steps = data.len();
+
+        let mut result = Vec::new();
+
+        // 模拟进度条处理过程
+        for i in 0..total_steps {
+            let item = &data[i];
+            let pitchwheel = item.get("pitchwheel").and_then(|v| v.as_i64()).unwrap_or(0) as i64;
+
+            // 如果有pitchwheel值且不为0，则跳过该帧
+            if pitchwheel != 0 {
+                continue;
+            }
+
+            let left_hand = item
+                .get("leftHand")
+                .and_then(|v| v.as_array())
+                .ok_or("Missing or invalid leftHand in item")?;
+            let frame = item
+                .get("frame")
+                .and_then(|v| v.as_f64())
+                .ok_or("Missing or invalid frame in item")?;
+
+            let mut strings = Vec::new();
+
+            // 遍历左手手指信息
+            for finger in left_hand {
+                let finger_obj = finger.as_object().ok_or("Finger is not an object")?;
+                let finger_index = finger_obj
+                    .get("fingerIndex")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(-1);
+                let finger_info = finger_obj
+                    .get("fingerInfo")
+                    .and_then(|v| v.as_object())
+                    .ok_or("Missing or invalid fingerInfo")?;
+
+                let press = finger_info
+                    .get("press")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.0);
+                let string_index = finger_info
+                    .get("stringIndex")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(-1);
+
+                // 如果是无效手指索引或者按压力度在0到5之间（不包括0和5），则添加弦索引
+                if finger_index == -1 || (press > 0.0 && press < 5.0) {
+                    strings.push(string_index);
+                }
+            }
+
+            // 去除重复的弦索引
+            let strings_set: std::collections::HashSet<i64> = strings.iter().cloned().collect();
+            if strings.len() > strings_set.len() {
+                strings = strings_set.into_iter().collect();
+            }
+
+            // 添加到结果中
+            result.push(serde_json::json!({
+                "frame": frame,
+                "strings": strings,
+            }));
+        }
+
+        // 写入右手记录文件
+        let file = File::create(right_hand_recorder_file)?;
+        serde_json::to_writer_pretty(file, &result)?;
+
+        Ok(result)
     }
 
     /// 将电子右手数据转换为动画
     ///
     /// # 参数
-    /// * `avatar` - 人物模型路径
     /// * `recorder_file` - 记录文件路径
     /// * `animation_file` - 动画输出文件路径
-    /// * `fps` - 帧率
     pub fn electronic_right_hand_2_animation(
         &self,
-        avatar: &str,
-        recorder_file: &str,
+        right_hand_data: &Vec<Value>,
         animation_file: &str,
-        fps: f64,
     ) -> Result<(), Box<dyn Error>> {
-        // 实现电子右手动画转换逻辑
-        todo!("这个应该写在animate 模块中")
+        let pick_position = 5.5;
+        let mut data_for_animation = Vec::new();
+        // 这里是计算拨弦需要保持的时间
+        let elapsed_frame = self.fps / 15.0;
+
+        let mut pick_position = pick_position; // 需要可变的pick_position
+
+        for i in 0..right_hand_data.len() {
+            let data = &right_hand_data[i];
+            let frame = data
+                .get("frame")
+                .and_then(|v| v.as_f64())
+                .ok_or("Missing or invalid frame in data")?;
+
+            let strings_array = data
+                .get("strings")
+                .and_then(|v| v.as_array())
+                .ok_or("Missing or invalid strings in data")?;
+
+            let strings: Vec<i64> = strings_array
+                .iter()
+                .map(|v| v.as_i64().unwrap_or(0))
+                .collect();
+
+            let is_arpeggio = strings.len() > 3;
+            let min_string = *strings.iter().min().unwrap_or(&0);
+            let max_string = *strings.iter().max().unwrap_or(&0);
+            let time_multiplier = if strings.len() > 2 { 2 } else { 1 };
+            let played_frame = frame + elapsed_frame * time_multiplier as f64;
+
+            let mut played_finished_frame = None;
+            if i < right_hand_data.len() - 1 {
+                let next_frame = right_hand_data[i + 1]
+                    .get("frame")
+                    .and_then(|v| v.as_f64())
+                    .ok_or("Missing or invalid frame in next data")?;
+
+                if next_frame > played_frame + elapsed_frame {
+                    played_finished_frame = Some(played_frame + elapsed_frame);
+                }
+            }
+
+            // 如果pick当前的位置是在最低弦下面，那么以最低弦为演奏弦并且上扫弦
+            // 如果pick当前的位置是在最高弦上面，那么以最高弦为演奏弦并且下扫弦
+            let pick_on_low_position = pick_position < min_string as f64;
+            let start_string = if pick_on_low_position {
+                min_string
+            } else {
+                max_string
+            };
+            let end_string = if pick_on_low_position {
+                max_string
+            } else {
+                min_string
+            };
+            let should_start_at_lower_position = pick_on_low_position;
+            let should_end_at_lower_position = !pick_on_low_position;
+
+            let ready = self.calculate_right_pick(
+                start_string as i32,
+                is_arpeggio,
+                should_start_at_lower_position,
+            )?;
+
+            let played = self.calculate_right_pick(
+                end_string as i32,
+                is_arpeggio,
+                should_end_at_lower_position,
+            )?;
+
+            if is_arpeggio && should_end_at_lower_position {
+                pick_position = -0.5;
+            } else {
+                pick_position = if should_end_at_lower_position {
+                    end_string as f64 + 0.5
+                } else {
+                    end_string as f64 - 0.5
+                };
+            }
+
+            // pick拨弦分为三个阶段，准备拨弦，拨弦，拨弦后维持动作。它没有再返回准备状态的必要。
+            data_for_animation.push(serde_json::json!({
+                "frame": frame,
+                "fingerInfos": ready
+            }));
+
+            data_for_animation.push(serde_json::json!({
+                "frame": played_frame,
+                "fingerInfos": played
+            }));
+
+            if let Some(finished_frame) = played_finished_frame {
+                data_for_animation.push(serde_json::json!({
+                    "frame": finished_frame,
+                    "fingerInfos": played
+                }));
+            }
+        }
+
+        // 写入动画文件
+        let file = File::create(animation_file)?;
+        serde_json::to_writer_pretty(file, &data_for_animation)?;
+
+        Ok(())
     }
 
     /// 将右手数据转换为动画
@@ -400,16 +579,588 @@ impl Animator {
     /// * `max_string_index` - 最大弦索引
     pub fn right_hand_2_animation(
         &self,
-        avatar: &str,
         recorder_file: &str,
         animation_file: &str,
-        fps: f64,
-        max_string_index: i32,
     ) -> Result<(), Box<dyn Error>> {
-        // 实现右手动画转换逻辑
-        todo!("这个应该写在animate 模块中")
+        let mut data_for_animation = Vec::new();
+        // 这里是计算按弦需要保持的时间
+        let elapsed_frame = self.fps / 15.0;
+
+        // 读取记录文件
+        let file = File::open(recorder_file)?;
+        let reader = BufReader::new(file);
+        let hand_dicts: Vec<Value> = serde_json::from_reader(reader)?;
+        let hand_count = hand_dicts.len();
+
+        for i in 0..hand_count {
+            let data = &hand_dicts[i];
+            let frame = data
+                .get("frame")
+                .and_then(|v| v.as_f64())
+                .ok_or("Missing frame in data")?;
+
+            let right_hand = data.get("rightHand").ok_or("Missing rightHand in data")?;
+            let used_fingers = right_hand
+                .get("usedFingers")
+                .ok_or("Missing usedFingers in rightHand")?;
+            let right_finger_positions = right_hand
+                .get("rightFingerPositions")
+                .ok_or("Missing rightFingerPositions in rightHand")?;
+
+            // 这个usedFingers为空，表示是扫弦，所以播放时间要长一些
+            let time_multiplier = if used_fingers.as_array().map_or(true, |arr| arr.is_empty()) {
+                2.0
+            } else {
+                1.0
+            };
+            let played_frame = frame + elapsed_frame * time_multiplier;
+
+            let played_finished_frame = if i != hand_count - 1 {
+                let next_frame = hand_dicts[i + 1]
+                    .get("frame")
+                    .and_then(|v| v.as_f64())
+                    .ok_or("Missing frame in next data")?;
+                if next_frame > played_frame + 2.0 * elapsed_frame {
+                    // 这个2 * elapsed_frame 相当于留给手掌移动到下一个位置的时间
+                    Some(next_frame - 2.0 * elapsed_frame)
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            let ready = self.calculate_right_hand_fingers(
+                right_finger_positions,
+                used_fingers,
+                false, // isAfterPlayed = false
+            )?;
+
+            let played = self.calculate_right_hand_fingers(
+                right_finger_positions,
+                used_fingers,
+                true, // isAfterPlayed = true
+            )?;
+
+            // 右手拨弦分为四个阶段，准备拨弦，拨弦，拨弦后维持动作，返回准备状态。
+            // 如果与下一个音符之间的间隔足够长，就需要把这些动作都记录下来
+
+            // 触弦帧
+            data_for_animation.push(serde_json::json!({
+                "frame": frame,
+                "fingerInfos": ready,
+            }));
+
+            data_for_animation.push(serde_json::json!({
+                "frame": played_frame,
+                "fingerInfos": played,
+            }));
+
+            // 拨弦后慢慢弹回来
+            if let Some(finished_frame) = played_finished_frame {
+                data_for_animation.push(serde_json::json!({
+                    "frame": finished_frame,
+                    "fingerInfos": ready,
+                }));
+            }
+        }
+
+        // 写入动画文件
+        let file = File::create(animation_file)?;
+        serde_json::to_writer_pretty(file, &data_for_animation)?;
+
+        Ok(())
     }
 
+    /// 计算右手手指位置
+    /// 计算右手手指位置
+    pub fn calculate_right_hand_fingers(
+        &self,
+        right_finger_positions: &Value,
+        used_fingers: &Value,
+        is_after_played: bool,
+    ) -> Result<HashMap<String, Vec<f64>>, Box<dyn Error>> {
+        // 解析参数
+        let right_finger_positions_vec: Result<Vec<i32>, _> = right_finger_positions
+            .as_array()
+            .ok_or("rightFingerPositions is not an array")?
+            .iter()
+            .map(|v| {
+                v.as_i64()
+                    .ok_or("Position value is not a number")
+                    .map(|i| i as i32)
+            })
+            .collect();
+
+        let right_finger_positions_vec = right_finger_positions_vec?;
+
+        let used_fingers_vec: Result<Vec<String>, _> = used_fingers
+            .as_array()
+            .ok_or("usedFingers is not an array")?
+            .iter()
+            .map(|v| {
+                v.as_str()
+                    .ok_or("Finger value is not a string")
+                    .map(|s| s.to_string())
+            })
+            .collect();
+
+        let used_fingers_vec = used_fingers_vec?;
+
+        let is_arpeggio = used_fingers_vec.is_empty();
+        let mut hand_position = 0.0;
+
+        if !is_arpeggio {
+            let mut offsets = 0.0;
+            for used_finger in &used_fingers_vec {
+                // 查找手指索引
+                let finger_index = RIGHT_FINGER_INDEX_DICT
+                    .iter()
+                    .find(|&&(finger, _)| finger == used_finger)
+                    .map(|&(_, index)| index)
+                    .ok_or(format!("Unknown finger: {}", used_finger))?;
+
+                let current_finger_position = right_finger_positions_vec[finger_index];
+                let multiplier = if used_finger == "p" { 3.0 } else { 1.0 };
+                offsets += current_finger_position as f64 * multiplier;
+            }
+
+            let total_finger_weights = if used_fingers_vec.contains(&"p".to_string()) {
+                used_fingers_vec.len() + 3
+            } else {
+                used_fingers_vec.len()
+            };
+
+            let average_offset = offsets / total_finger_weights as f64;
+
+            /*
+            这一段解释一下：
+            我只在blender里调整了h0和h3的两个位置，然后通过这两个位置的average_offset来计算其它手指的位置。
+            所谓 average_offset， 是计量了所有需要弹奏的手指的位置的平均值，然后通过这个平均值来决定手掌的位置，最后面再决定那些没有参与演奏的手指的位置。
+            在计算 average_offset时，p指是特殊处理了的，它的权重是3，因为p指是决定手掌位置最重要的手指。
+
+            h0和h3两个极端手型，这两个组合包含了各个手指实际上能触碰的最高和最低弦：
+            h3是在{"p": 2, "i": 0, "m": 0, "a": 0}的位置上，它的average_offset是1, 同时h_position=3
+            h0是在{"p": 5, "i": 4, "m": 3, "a": 2}的位置上，它的average_offset是6，同时h_position=0
+
+            假定h_position都是线性分布，满足：
+            h_position = m * average_offset + b
+
+            根据上面这两个值，我们可以计算出来线性插值的斜率是：
+            m = -0.6
+
+            最终线性插值的计算公式是：
+            h_position = -0.6 * average_offset + 3.6
+
+            而这个时间手掌的实际位置是：
+            H_R = h0 + h_position * (h3 - h0) / 3
+            */
+            hand_position = -0.6 * average_offset + 3.6;
+        }
+
+        // 调用new_finger_position_method方法计算结果
+        let result = self.get_fingers_position(
+            &right_finger_positions_vec,
+            is_arpeggio,
+            is_after_played,
+            hand_position,
+            &used_fingers_vec,
+        )?;
+
+        Ok(result)
+    }
+
+    /// 获取嵌套的avatar数据字段为f64向量
+    fn get_avatar_nested_field_as_f64_vector(
+        &self,
+        path: &[&str],
+    ) -> Result<Vec<f64>, Box<dyn Error>> {
+        let field = self
+            .get_avatar_nested_field(path)
+            .ok_or(format!("Missing field {:?}", path))?;
+
+        let array = field
+            .as_array()
+            .ok_or(format!("Field {:?} is not an array", path))?;
+
+        array
+            .iter()
+            .map(|v| {
+                v.as_f64()
+                    .ok_or(format!("Field {:?} contains non-number values", path).into())
+            })
+            .collect::<Result<Vec<f64>, Box<dyn Error>>>()
+    }
+
+    /// 新的计算手指位置方法
+    fn get_fingers_position(
+        &self,
+        right_finger_positions: &Vec<i32>,
+        is_arpeggio: bool,
+        is_after_played: bool,
+        hand_position: f64,
+        used_right_fingers: &Vec<String>,
+    ) -> Result<HashMap<String, Vec<f64>>, Box<dyn Error>> {
+        let mut result = HashMap::new();
+
+        // 定义手指运动的距离，是P0和P1之间的距离的8分之1，相当于0.725的弦距
+        let p0 = self.get_avatar_nested_field_as_f64_vector(&["LEFT_FINGER_POSITIONS", "P0"])?;
+        let p1 = self.get_avatar_nested_field_as_f64_vector(&["LEFT_FINGER_POSITIONS", "P1"])?;
+        let p0_p1_diff = subtract_vectors(&p0, &p1);
+        let finger_move_distance_while_play = vector_norm(&p0_p1_diff) / 8.0;
+
+        // 大拇指的移动方向以及其它手指的移动方向，一开始设置为None
+        let mut t_move: Option<Vec<f64>> = None;
+        let mut f_move: Option<Vec<f64>> = None;
+
+        let (h_r, h_rotation_r, hp_r, tp_r, t_r, i_r, m_r, r_r, p_r);
+
+        if is_arpeggio {
+            if is_after_played {
+                h_r = self.get_avatar_nested_field_as_f64_vector(&[
+                    "RIGHT_HAND_POSITIONS",
+                    "Normal_Pend_H_R",
+                ])?;
+                h_rotation_r = self.get_avatar_nested_field_as_f64_vector(&[
+                    "ROTATIONS",
+                    "H_rotation_R",
+                    "Normal",
+                    "Pend",
+                ])?;
+                hp_r = self.get_avatar_nested_field_as_f64_vector(&[
+                    "RIGHT_HAND_POSITIONS",
+                    "Normal_Pend_HP_R",
+                ])?;
+                tp_r =
+                    self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "tpend"])?;
+                t_r =
+                    self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "pend"])?;
+                i_r =
+                    self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "iend"])?;
+                m_r =
+                    self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "mend"])?;
+                r_r =
+                    self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "aend"])?;
+                p_r =
+                    self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "chend"])?;
+            } else {
+                h_rotation_r = self.get_avatar_nested_field_as_f64_vector(&[
+                    "ROTATIONS",
+                    "H_rotation_R",
+                    "Normal",
+                    "P0",
+                ])?;
+                h_r = self.get_avatar_nested_field_as_f64_vector(&[
+                    "RIGHT_HAND_POSITIONS",
+                    "Normal_P0_H_R",
+                ])?;
+                hp_r = self.get_avatar_nested_field_as_f64_vector(&[
+                    "RIGHT_HAND_POSITIONS",
+                    "Normal_P0_HP_R",
+                ])?;
+                tp_r =
+                    self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "tp0"])?;
+                t_r =
+                    self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "p0"])?;
+                i_r =
+                    self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "i0"])?;
+                m_r =
+                    self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "m0"])?;
+                r_r =
+                    self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "a0"])?;
+                p_r =
+                    self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "ch0"])?;
+            }
+        } else {
+            let h0 = self.get_avatar_nested_field_as_f64_vector(&[
+                "RIGHT_HAND_POSITIONS",
+                "Normal_P0_H_R",
+            ])?;
+            let h3 = self.get_avatar_nested_field_as_f64_vector(&[
+                "RIGHT_HAND_POSITIONS",
+                "Normal_P3_H_R",
+            ])?;
+
+            // H_R = h0 + hand_position * (h3 - h0) / 3
+            let h3_h0_diff = subtract_vectors(&h3, &h0);
+            let scaled_diff = scale_vector(&h3_h0_diff, hand_position / 3.0);
+            h_r = add_vectors(&h0, &scaled_diff);
+
+            let h_rotation_0 = self.get_avatar_nested_field_as_f64_vector(&[
+                "ROTATIONS",
+                "H_rotation_R",
+                "Normal",
+                "P0",
+            ])?;
+            let h_rotation_3 = self.get_avatar_nested_field_as_f64_vector(&[
+                "ROTATIONS",
+                "H_rotation_R",
+                "Normal",
+                "P3",
+            ])?;
+
+            h_rotation_r = if h_rotation_0.len() == 3 {
+                let h_rot_3_0_diff = subtract_vectors(&h_rotation_3, &h_rotation_0);
+                let scaled_diff = scale_vector(&h_rot_3_0_diff, hand_position / 3.0);
+                add_vectors(&h_rotation_0, &scaled_diff)
+            } else if h_rotation_0.len() == 4 {
+                let hand_weight = hand_position / 3.0;
+                let h_rot_0_quat = Quaternion::from_vector64(h_rotation_0);
+                let h_rot_3_quat = Quaternion::from_vector64(h_rotation_3);
+                let h_rotation_quat = slerp(&h_rot_0_quat, &h_rot_3_quat, hand_weight);
+                h_rotation_quat.to_vector64()
+            } else {
+                return Err("Unknown hand rotation type".into());
+            };
+
+            let hp_0 = self.get_avatar_nested_field_as_f64_vector(&[
+                "RIGHT_HAND_POSITIONS",
+                "Normal_P0_HP_R",
+            ])?;
+            let hp_3 = self.get_avatar_nested_field_as_f64_vector(&[
+                "RIGHT_HAND_POSITIONS",
+                "Normal_P3_HP_R",
+            ])?;
+            let hp_3_0_diff = subtract_vectors(&hp_3, &hp_0);
+            let scaled_diff = scale_vector(&hp_3_0_diff, hand_position / 3.0);
+            hp_r = add_vectors(&hp_0, &scaled_diff);
+
+            let tp_0 =
+                self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "tp0"])?;
+            let tp_3 =
+                self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "tp3"])?;
+            let tp_3_0_diff = subtract_vectors(&tp_3, &tp_0);
+            let scaled_diff = scale_vector(&tp_3_0_diff, hand_position / 3.0);
+            tp_r = add_vectors(&tp_0, &scaled_diff);
+
+            let n_quat_0 = self.get_avatar_nested_field_as_f64_vector(&[
+                "RIGHT_HAND_LINES",
+                "right_hand_normal_p0",
+                "vector",
+            ])?;
+            let n_quat_3 = self.get_avatar_nested_field_as_f64_vector(&[
+                "RIGHT_HAND_LINES",
+                "right_hand_normal_p3",
+                "vector",
+            ])?;
+            let n_quat_3_0_diff = subtract_vectors(&n_quat_3, &n_quat_0);
+            let scaled_diff = scale_vector(&n_quat_3_0_diff, hand_position / 3.0);
+            let n_quat = add_vectors(&n_quat_0, &scaled_diff);
+
+            let p2 =
+                self.get_avatar_nested_field_as_f64_vector(&["LEFT_FINGER_POSITIONS", "P2"])?;
+            let p3 =
+                self.get_avatar_nested_field_as_f64_vector(&["LEFT_FINGER_POSITIONS", "P3"])?;
+            let string_direction = subtract_vectors(&p2, &p0);
+            let string_direction_norm = vector_norm(&string_direction);
+            let string_direction = scale_vector(&string_direction, 1.0 / string_direction_norm);
+
+            let t0 = self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "p0"])?;
+            let t3 = self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "p3"])?;
+            let t_3_0_diff = subtract_vectors(&t3, &t0);
+            let scaled_diff = scale_vector(&t_3_0_diff, hand_position / 3.0);
+            let t_rest_position = add_vectors(&t0, &scaled_diff);
+
+            let thumb_direction_0 = self.get_avatar_nested_field_as_f64_vector(&[
+                "RIGHT_HAND_LINES",
+                "right_thumb_direct_p0",
+                "vector",
+            ])?;
+            let thumb_direction_3 = self.get_avatar_nested_field_as_f64_vector(&[
+                "RIGHT_HAND_LINES",
+                "right_thumb_direct_p3",
+                "vector",
+            ])?;
+            let thumb_direction_3_0_diff = subtract_vectors(&thumb_direction_3, &thumb_direction_0);
+            let scaled_diff = scale_vector(&thumb_direction_3_0_diff, hand_position / 3.0);
+            let thumb_direction = add_vectors(&thumb_direction_0, &scaled_diff);
+
+            let finger_direct_0 = self.get_avatar_nested_field_as_f64_vector(&[
+                "RIGHT_HAND_LINES",
+                "right_finger_direct_p0",
+                "vector",
+            ])?;
+            let finger_direct_3 = self.get_avatar_nested_field_as_f64_vector(&[
+                "RIGHT_HAND_LINES",
+                "right_finger_direct_p3",
+                "vector",
+            ])?;
+            let finger_direct_3_0_diff = subtract_vectors(&finger_direct_3, &finger_direct_0);
+            let scaled_diff = scale_vector(&finger_direct_3_0_diff, hand_position / 3.0);
+            let finger_direct = add_vectors(&finger_direct_0, &scaled_diff);
+
+            let i0 = self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "i0"])?;
+            let i3 = self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "i3"])?;
+            let i_3_0_diff = subtract_vectors(&i3, &i0);
+            let scaled_diff = scale_vector(&i_3_0_diff, hand_position / 3.0);
+            let i_rest_position = add_vectors(&i0, &scaled_diff);
+
+            let m0 = self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "m0"])?;
+            let m3 = self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "m3"])?;
+            let m_3_0_diff = subtract_vectors(&m3, &m0);
+            let scaled_diff = scale_vector(&m_3_0_diff, hand_position / 3.0);
+            let m_rest_position = add_vectors(&m0, &scaled_diff);
+
+            let a0 = self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "a0"])?;
+            let a3 = self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "a3"])?;
+            let a_3_0_diff = subtract_vectors(&a3, &a0);
+            let scaled_diff = scale_vector(&a_3_0_diff, hand_position / 3.0);
+            let a_rest_position = add_vectors(&a0, &scaled_diff);
+
+            let ch0 =
+                self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "ch0"])?;
+            let ch3 =
+                self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "ch3"])?;
+            let ch_3_0_diff = subtract_vectors(&ch3, &ch0);
+            let scaled_diff = scale_vector(&ch_3_0_diff, hand_position / 3.0);
+            let ch_rest_position = add_vectors(&ch0, &scaled_diff);
+
+            if used_right_fingers.contains(&"p".to_string()) {
+                let p_current_string_index = right_finger_positions[0];
+                // t_target就是大拇指运动时的目标位置，和其它手指都是向掌心运动不同，大拇指是往弦上运动的
+                let t_target = add_vectors(&t_rest_position, &thumb_direction);
+                let t_touch_position = get_string_touch_position(
+                    &t_rest_position,
+                    &t_target,
+                    &n_quat,
+                    &p0,
+                    &p1,
+                    &p2,
+                    &p3,
+                    p_current_string_index,
+                    self.max_string_index,
+                )?;
+
+                // 读取大拇指拨弦的方向
+                let thumb_direction_norm = vector_norm(&thumb_direction);
+                t_move = Some(scale_vector(&thumb_direction, 1.0 / thumb_direction_norm));
+
+                if is_after_played {
+                    if let Some(ref t_move_vec) = t_move {
+                        let scaled_move = scale_vector(t_move_vec, finger_move_distance_while_play);
+                        t_r = add_vectors(&t_touch_position, &scaled_move);
+                    } else {
+                        t_r = t_touch_position;
+                    }
+                } else {
+                    if let Some(ref t_move_vec) = t_move {
+                        let scaled_move = scale_vector(t_move_vec, finger_move_distance_while_play);
+                        t_r = subtract_vectors(&t_touch_position, &scaled_move);
+                    } else {
+                        t_r = t_touch_position;
+                    }
+                }
+            } else {
+                t_r = t_rest_position;
+            }
+
+            // 处理i, m, a三个手指的计算,有一个小[r](file://g:\fretDance_rust\target\debug\build\serde-d197b0748e5ae023\stderr)其实就是a指的英文ring
+            let finger_configs = vec![
+                ("i", 1, i_rest_position),
+                ("m", 2, m_rest_position),
+                ("r", 3, a_rest_position),
+            ];
+
+            let mut finger_results = HashMap::new();
+
+            // 处理ima三个手指的拨弦，它们的逻辑是相似的
+            for (finger_char, finger_idx, rest_pos) in finger_configs {
+                // 小拇指的英文缩写和吉他用语里的左手小拇指不一样，导致这个判断的写法会啰嗦一点
+                if used_right_fingers.contains(&finger_char.to_string())
+                    || (finger_char == "r" && used_right_fingers.contains(&"a".to_string()))
+                {
+                    // 计算手指的拨弦方向，这里要注意因为在blender中方向线与手指运动的方式是相反的，所以这里要加负号
+                    let finger_direct_norm = vector_norm(&finger_direct);
+                    f_move = Some(scale_vector(&finger_direct, -1.0 / finger_direct_norm));
+                    let current_string_index = right_finger_positions[finger_idx];
+                    let target = add_vectors(&rest_pos, &finger_direct);
+                    let touch_position = get_string_touch_position(
+                        &rest_pos,
+                        &target,
+                        &n_quat,
+                        &p0,
+                        &p1,
+                        &p2,
+                        &p3,
+                        current_string_index,
+                        self.max_string_index,
+                    )?;
+
+                    let finger_key = if finger_char == "r" {
+                        "R".to_string()
+                    } else {
+                        finger_char.to_uppercase().to_string()
+                    };
+
+                    if is_after_played {
+                        if let Some(ref f_move_vec) = f_move {
+                            let scaled_move =
+                                scale_vector(f_move_vec, finger_move_distance_while_play);
+                            finger_results.insert(
+                                format!("{}_R", finger_key),
+                                add_vectors(&touch_position, &scaled_move),
+                            );
+                        } else {
+                            finger_results.insert(format!("{}_R", finger_key), touch_position);
+                        }
+                    } else {
+                        if let Some(ref f_move_vec) = f_move {
+                            let scaled_move =
+                                scale_vector(f_move_vec, finger_move_distance_while_play);
+                            finger_results.insert(
+                                format!("{}_R", finger_key),
+                                subtract_vectors(&touch_position, &scaled_move),
+                            );
+                        } else {
+                            finger_results.insert(format!("{}_R", finger_key), touch_position);
+                        }
+                    }
+                } else {
+                    let finger_key = if finger_char == "r" {
+                        "R".to_string()
+                    } else {
+                        finger_char.to_uppercase().to_string()
+                    };
+                    finger_results.insert(format!("{}_R", finger_key), rest_pos);
+                }
+            }
+
+            // 然后分别赋值
+            i_r = finger_results.remove("I_R").unwrap_or_else(|| vec![0.0; 3]);
+            m_r = finger_results.remove("M_R").unwrap_or_else(|| vec![0.0; 3]);
+            r_r = finger_results.remove("R_R").unwrap_or_else(|| vec![0.0; 3]);
+
+            // ch指是不参与演奏的，所以直接使用休息位置
+            p_r = ch_rest_position;
+        }
+
+        // 给拨弦后的手掌添加一点移动
+        let h_move = if f_move.is_some() {
+            f_move
+        } else {
+            t_move.clone()
+        };
+
+        let mut h_r = h_r;
+        if let Some(h_move_vec) = h_move {
+            if is_after_played {
+                let scaled_move = scale_vector(&h_move_vec, finger_move_distance_while_play * 0.25);
+                h_r = subtract_vectors(&h_r, &scaled_move);
+            }
+        }
+
+        result.insert("H_R".to_string(), h_r);
+        result.insert("H_rotation_R".to_string(), h_rotation_r);
+        result.insert("HP_R".to_string(), hp_r);
+        result.insert("TP_R".to_string(), tp_r);
+        result.insert("T_R".to_string(), t_r);
+        result.insert("I_R".to_string(), i_r);
+        result.insert("M_R".to_string(), m_r);
+        result.insert("R_R".to_string(), r_r);
+        result.insert("P_R".to_string(), p_r);
+
+        Ok(result)
+    }
     /// 生成吉他的弦动画
     ///
     /// # 参数
@@ -2166,5 +2917,198 @@ impl Animator {
         }
 
         Ok(init_finger_infos)
+    }
+
+    pub fn calculate_right_pick(
+        &self,
+        string_index: i32,
+        is_arpeggio: bool,
+        should_stay_at_lower_position: bool,
+    ) -> Result<HashMap<String, Vec<f64>>, Box<dyn Error>> {
+        let mut result = HashMap::new();
+
+        if is_arpeggio && should_stay_at_lower_position {
+            let t_r = self
+                .get_avatar_nested_field(&["RIGHT_HAND_POSITIONS", "pend"])
+                .ok_or("Missing RIGHT_HAND_POSITIONS/pend in avatar data")?
+                .as_array()
+                .ok_or("pend is not an array")?
+                .iter()
+                .map(|v| v.as_f64().ok_or("pend values are not numbers"))
+                .collect::<Result<Vec<f64>, _>>()?;
+
+            let h_r = self
+                .get_avatar_nested_field(&["RIGHT_HAND_POSITIONS", "Normal_Pend_H_R"])
+                .ok_or("Missing RIGHT_HAND_POSITIONS/Normal_Pend_H_R in avatar data")?
+                .as_array()
+                .ok_or("Normal_Pend_H_R is not an array")?
+                .iter()
+                .map(|v| v.as_f64().ok_or("Normal_Pend_H_R values are not numbers"))
+                .collect::<Result<Vec<f64>, _>>()?;
+
+            let hp_r = self
+                .get_avatar_nested_field(&["RIGHT_HAND_POSITIONS", "Normal_Pend_HP_R"])
+                .ok_or("Missing RIGHT_HAND_POSITIONS/Normal_Pend_HP_R in avatar data")?
+                .as_array()
+                .ok_or("Normal_Pend_HP_R is not an array")?
+                .iter()
+                .map(|v| v.as_f64().ok_or("Normal_Pend_HP_R values are not numbers"))
+                .collect::<Result<Vec<f64>, _>>()?;
+
+            let h_rotation_r = self
+                .get_avatar_nested_field(&["ROTATIONS", "H_rotation_R", "Normal", "Pend"])
+                .ok_or("Missing ROTATIONS/H_rotation_R/Normal/Pend in avatar data")?
+                .as_array()
+                .ok_or("H_rotation_R/Normal/Pend is not an array")?
+                .iter()
+                .map(|v| v.as_f64().ok_or("H_rotation_R values are not numbers"))
+                .collect::<Result<Vec<f64>, _>>()?;
+
+            result.insert("T_R".to_string(), t_r);
+            result.insert("H_R".to_string(), h_r);
+            result.insert("HP_R".to_string(), hp_r);
+            result.insert("H_rotation_R".to_string(), h_rotation_r);
+        } else {
+            // 这里的后缀high和low分别表示高音和低音，它刚刚好和stringIndex顺序相反
+            let tr_high = self
+                .get_avatar_nested_field(&["RIGHT_HAND_POSITIONS", "p3"])
+                .ok_or("Missing RIGHT_HAND_POSITIONS/p3 in avatar data")?
+                .as_array()
+                .ok_or("p3 is not an array")?
+                .iter()
+                .map(|v| v.as_f64().ok_or("p3 values are not numbers"))
+                .collect::<Result<Vec<f64>, _>>()?;
+
+            let tr_low = self
+                .get_avatar_nested_field(&["RIGHT_HAND_POSITIONS", "p0"])
+                .ok_or("Missing RIGHT_HAND_POSITIONS/p0 in avatar data")?
+                .as_array()
+                .ok_or("p0 is not an array")?
+                .iter()
+                .map(|v| v.as_f64().ok_or("p0 values are not numbers"))
+                .collect::<Result<Vec<f64>, _>>()?;
+
+            let h_r_high = self
+                .get_avatar_nested_field(&["RIGHT_HAND_POSITIONS", "Normal_P3_H_R"])
+                .ok_or("Missing RIGHT_HAND_POSITIONS/Normal_P3_H_R in avatar data")?
+                .as_array()
+                .ok_or("Normal_P3_H_R is not an array")?
+                .iter()
+                .map(|v| v.as_f64().ok_or("Normal_P3_H_R values are not numbers"))
+                .collect::<Result<Vec<f64>, _>>()?;
+
+            let h_r_low = self
+                .get_avatar_nested_field(&["RIGHT_HAND_POSITIONS", "Normal_P0_H_R"])
+                .ok_or("Missing RIGHT_HAND_POSITIONS/Normal_P0_H_R in avatar data")?
+                .as_array()
+                .ok_or("Normal_P0_H_R is not an array")?
+                .iter()
+                .map(|v| v.as_f64().ok_or("Normal_P0_H_R values are not numbers"))
+                .collect::<Result<Vec<f64>, _>>()?;
+
+            let hp_r_high = self
+                .get_avatar_nested_field(&["RIGHT_HAND_POSITIONS", "Normal_P3_HP_R"])
+                .ok_or("Missing RIGHT_HAND_POSITIONS/Normal_P3_HP_R in avatar data")?
+                .as_array()
+                .ok_or("Normal_P3_HP_R is not an array")?
+                .iter()
+                .map(|v| v.as_f64().ok_or("Normal_P3_HP_R values are not numbers"))
+                .collect::<Result<Vec<f64>, _>>()?;
+
+            let hp_r_low = self
+                .get_avatar_nested_field(&["RIGHT_HAND_POSITIONS", "Normal_P0_HP_R"])
+                .ok_or("Missing RIGHT_HAND_POSITIONS/Normal_P0_HP_R in avatar data")?
+                .as_array()
+                .ok_or("Normal_P0_HP_R is not an array")?
+                .iter()
+                .map(|v| v.as_f64().ok_or("Normal_P0_HP_R values are not numbers"))
+                .collect::<Result<Vec<f64>, _>>()?;
+
+            let h_rotation_r_high = self
+                .get_avatar_nested_field(&["ROTATIONS", "H_rotation_R", "Normal", "P3"])
+                .ok_or("Missing ROTATIONS/H_rotation_R/Normal/P3 in avatar data")?
+                .as_array()
+                .ok_or("H_rotation_R/Normal/P3 is not an array")?
+                .iter()
+                .map(|v| v.as_f64().ok_or("H_rotation_R high values are not numbers"))
+                .collect::<Result<Vec<f64>, _>>()?;
+
+            let h_rotation_r_low = self
+                .get_avatar_nested_field(&["ROTATIONS", "H_rotation_R", "Normal", "P0"])
+                .ok_or("Missing ROTATIONS/H_rotation_R/Normal/P0 in avatar data")?
+                .as_array()
+                .ok_or("H_rotation_R/Normal/P0 is not an array")?
+                .iter()
+                .map(|v| v.as_f64().ok_or("H_rotation_R low values are not numbers"))
+                .collect::<Result<Vec<f64>, _>>()?;
+
+            // 计算tr_diff
+            let tr_diff: f64 = tr_high
+                .iter()
+                .zip(tr_low.iter())
+                .map(|(a, b)| (a - b).powi(2))
+                .sum::<f64>()
+                .sqrt();
+
+            let finger_move_distance_while_play = tr_diff / 20.0;
+
+            // 因为相反，所以这里的权重应该是用1减一下
+            let thumb_weight = 1.0 - (string_index as f64 / (self.max_string_index as f64 + 1.0));
+
+            let t_r: Vec<f64> = tr_high
+                .iter()
+                .zip(tr_low.iter())
+                .map(|(high, low)| high * thumb_weight + low * (1.0 - thumb_weight))
+                .collect();
+
+            let h_r: Vec<f64> = h_r_high
+                .iter()
+                .zip(h_r_low.iter())
+                .map(|(high, low)| high * thumb_weight + low * (1.0 - thumb_weight))
+                .collect();
+
+            let hp_r: Vec<f64> = hp_r_high
+                .iter()
+                .zip(hp_r_low.iter())
+                .map(|(high, low)| high * thumb_weight + low * (1.0 - thumb_weight))
+                .collect();
+
+            // H_rotation_R = slerp(h_rotation_r_high, h_rotation_r_low, thumb_weight)
+            let h_rotation_r_low = Quaternion::from_vector64(h_rotation_r_low);
+            let h_rotation_r_high = Quaternion::from_vector64(h_rotation_r_high);
+            let h_rotation_r = slerp(&h_rotation_r_high, &h_rotation_r_low, thumb_weight);
+
+            // 如果当前pick位置在当前弦的位置之下，那么就是在低位置，否则就是在高位置
+            let multiplier = if should_stay_at_lower_position {
+                1.0
+            } else {
+                -1.0
+            };
+
+            // T_R += np.array(move) * fingerMoveDistanceWhilePlay * multiplier
+            let move_vector = self
+                .get_avatar_nested_field(&["RIGHT_HAND_LINES", "T_line", "vector"])
+                .ok_or("Missing RIGHT_HAND_LINES/T_line/vector in avatar data")?
+                .as_array()
+                .ok_or("T_line/vector is not an array")?
+                .iter()
+                .map(|v| v.as_f64().ok_or("T_line/vector values are not numbers"))
+                .collect::<Result<Vec<f64>, _>>()?;
+
+            let t_r: Vec<f64> = t_r
+                .iter()
+                .zip(move_vector.iter())
+                .map(|(t, m)| t + m * finger_move_distance_while_play * multiplier)
+                .collect();
+
+            let h_rotation_r = h_rotation_r.to_vector64();
+
+            result.insert("T_R".to_string(), t_r);
+            result.insert("H_R".to_string(), h_r);
+            result.insert("HP_R".to_string(), hp_r);
+            result.insert("H_rotation_R".to_string(), h_rotation_r);
+        }
+
+        Ok(result)
     }
 }

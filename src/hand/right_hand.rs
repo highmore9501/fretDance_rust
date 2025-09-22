@@ -450,14 +450,3 @@ pub fn get_transformation_matrix(
     // 实现变换矩阵计算
     ndarray::Array2::zeros((4, 4))
 }
-
-pub fn calculate_right_pick(
-    avatar: &str,
-    string_index: i32,
-    is_arpeggio: bool,
-    should_stay_at_lower_position: bool,
-    guitar_max_string_index: i32,
-) -> HashMap<String, Vec<f64>> {
-    // 实现pick位置计算
-    HashMap::new()
-}

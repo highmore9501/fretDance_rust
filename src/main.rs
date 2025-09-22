@@ -201,16 +201,14 @@ fn main() {
             println!("开始生成右手演奏数据");
 
             if avatar.ends_with("_E") {
-                animator.left_hand_2_electronic_right_hand(
+                let right_hand_recorder_data = animator.left_hand_2_electronic_right_hand(
                     &left_hand_recorder_file,
                     &right_hand_recorder_file,
                 )?;
 
                 animator.electronic_right_hand_2_animation(
-                    avatar,
-                    &right_hand_recorder_file,
+                    &right_hand_recorder_data,
                     &right_hand_animation_file,
-                    fps,
                 )?;
             } else {
                 let init_right_hand = RightHand::new(
@@ -251,11 +249,8 @@ fn main() {
                 )?;
 
                 animator.right_hand_2_animation(
-                    avatar,
                     &right_hand_recorder_file,
                     &right_hand_animation_file,
-                    fps,
-                    max_string_index as i32,
                 )?;
             }
 
