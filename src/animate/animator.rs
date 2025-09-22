@@ -813,7 +813,7 @@ impl Animator {
         let mut t_move: Option<Vec<f64>> = None;
         let mut f_move: Option<Vec<f64>> = None;
 
-        let (h_r, h_rotation_r, hp_r, tp_r, t_r, i_r, m_r, r_r, p_r);
+        let (h_r, h_rotation_r, hp_r, tp_r, mut t_r, mut i_r, mut m_r, mut r_r, p_r);
 
         if is_arpeggio {
             if is_after_played {
@@ -951,9 +951,6 @@ impl Animator {
                 self.get_avatar_nested_field_as_f64_vector(&["LEFT_FINGER_POSITIONS", "P2"])?;
             let p3 =
                 self.get_avatar_nested_field_as_f64_vector(&["LEFT_FINGER_POSITIONS", "P3"])?;
-            let string_direction = subtract_vectors(&p2, &p0);
-            let string_direction_norm = vector_norm(&string_direction);
-            let string_direction = scale_vector(&string_direction, 1.0 / string_direction_norm);
 
             let t0 = self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "p0"])?;
             let t3 = self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "p3"])?;
@@ -1146,6 +1143,31 @@ impl Animator {
             if is_after_played {
                 let scaled_move = scale_vector(&h_move_vec, finger_move_distance_while_play * 0.25);
                 h_r = subtract_vectors(&h_r, &scaled_move);
+
+                // 应用后座力到未参与演奏的手指
+                if !used_right_fingers.contains(&"p".to_string()) {
+                    let scaled_move =
+                        scale_vector(&h_move_vec, finger_move_distance_while_play * 0.25);
+                    let t_r_moved = subtract_vectors(&t_r, &scaled_move);
+                    t_r = t_r_moved;
+                }
+
+                // 处理i, m, a三个手指的后座力效果
+                let finger_configs =
+                    vec![("i", 1, &mut i_r), ("m", 2, &mut m_r), ("r", 3, &mut r_r)];
+
+                for (finger_char, _finger_idx, finger_pos) in finger_configs {
+                    // 检查手指是否未参与演奏
+                    let is_used = used_right_fingers.contains(&finger_char.to_string())
+                        || (finger_char == "r" && used_right_fingers.contains(&"a".to_string()));
+
+                    if !is_used {
+                        let scaled_move =
+                            scale_vector(&h_move_vec, finger_move_distance_while_play * 0.25);
+                        let moved_pos = subtract_vectors(finger_pos, &scaled_move);
+                        *finger_pos = moved_pos;
+                    }
+                }
             }
         }
 
