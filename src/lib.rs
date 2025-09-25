@@ -1,4 +1,5 @@
 pub mod animate;
+pub mod egui;
 pub mod fret_dancer;
 pub mod guitar;
 pub mod hand;

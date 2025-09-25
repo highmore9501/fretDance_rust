@@ -265,7 +265,19 @@ impl MidiProcessor {
         let mut result = String::new();
 
         for (i, track) in smf.tracks.iter().enumerate() {
-            result.push_str(&format!("Track {}: {:?}\n", i, track));
+            // 从轨道事件中查找轨道名称
+            let track_name = track
+                .iter()
+                .find_map(|event| {
+                    if let TrackEventKind::Meta(MetaMessage::TrackName(name)) = event.kind {
+                        std::str::from_utf8(name).ok()
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or("Unknown");
+
+            result.push_str(&format!("Track {}: {}\n", i, track_name));
 
             for event in track {
                 if let TrackEventKind::Midi { channel, message } = event.kind {
@@ -287,7 +299,6 @@ impl MidiProcessor {
 
         Ok(result)
     }
-
     pub fn midi_to_guitar_notes(
         &self,
         midi_file_path: &str,

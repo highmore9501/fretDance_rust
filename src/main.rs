@@ -1,10 +1,27 @@
 // main.rs 或 fret_dancer.rs
 use fret_dance_rust::*;
 
+use crate::egui::FretDanceApp;
 use crate::fret_dancer::FretDancer;
 
 fn main() {
-    // 主函数
+    // 启动GUI应用
+    let native_options = eframe::NativeOptions {
+        viewport: eframe::egui::ViewportBuilder::default()
+            .with_inner_size([800.0, 600.0])
+            .with_min_inner_size([300.0, 220.0]),
+        ..Default::default()
+    };
+
+    eframe::run_native(
+        "Fret Dance",
+        native_options,
+        Box::new(|cc| Ok(Box::new(FretDanceApp::new(cc)))),
+    )
+    .expect("Failed to start eframe application");
+
+    // 原始命令行版本保留作为参考
+    /*
     fn run_fret_dance() -> Result<(), Box<dyn std::error::Error>> {
         let avatar = "户山香澄_E";
         let midi_file_path = "asset/midi/Sunburst.mid";
@@ -41,4 +58,5 @@ fn main() {
             std::process::exit(1);
         }
     }
+    */
 }
