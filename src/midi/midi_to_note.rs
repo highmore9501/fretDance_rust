@@ -26,7 +26,7 @@ pub struct NoteInfo {
     pub real_tick: f64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PitchWheelInfo {
     pub pitchwheel: i16,
     pub real_tick: f64,

@@ -1,17 +1,13 @@
 // hand_pose_record_pool.rs
-use serde::{Deserialize, Serialize};
 use serde_json;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::fs::File;
-use std::io::{BufReader, Write};
-use std::path::Path;
+use std::io::BufReader;
 
 // 假设已存在的模块和结构体
 use crate::guitar::guitar_chord::convert_notes_to_chord;
 use crate::guitar::guitar_instance::Guitar;
-use crate::guitar::guitar_note::GuitarNote;
-use crate::hand::left_finger::LeftFinger;
 use crate::hand::left_hand::{LeftHand, convert_chord_to_finger_positions};
 use crate::hand::right_hand::RightHand;
 use crate::midi::midi_to_note::{MidiProcessor, NoteInfo, TempoChange};
@@ -448,12 +444,9 @@ impl HandPoseRecordPool {
     }
 
     /// 生成右手记录器
-    /// 生成右手记录器
     pub fn generate_right_hand_recorder(
         &mut self,
         item: &serde_json::Value,
-        mut current_recorder_num: usize,
-        mut previous_recorder_num: usize,
         max_string_index: usize,
     ) {
         // 获取real_tick
@@ -622,23 +615,11 @@ impl HandPoseRecordPool {
         for new_recorder in new_recorders {
             self.add_right_recorder(new_recorder);
         }
-
-        previous_recorder_num = current_recorder_num;
-        current_recorder_num = self.recorders.len();
-
-        if current_recorder_num < previous_recorder_num {
-            println!(
-                "当前record数量是{}，上一次record数量是{}",
-                current_recorder_num, previous_recorder_num
-            );
-        }
     }
-    /// 更新右手记录器池
+    // 更新右手记录器池
     pub fn update_right_hand_recorder_pool(
         &mut self,
         left_hand_recorder_file: &str,
-        mut current_recorder_num: usize,
-        mut previous_recorder_num: usize,
         max_string_index: usize,
     ) -> Result<(), Box<dyn std::error::Error>> {
         // 读取左手记录文件
@@ -647,18 +628,11 @@ impl HandPoseRecordPool {
         let data: Vec<serde_json::Value> = serde_json::from_reader(reader)?;
 
         let total_steps = data.len();
-        current_recorder_num = 0;
-        previous_recorder_num = current_recorder_num;
 
         // 遍历数据处理（将来可以在这里添加 eGui 进度条更新逻辑）
         for i in 0..total_steps {
             let item = &data[i];
-            self.generate_right_hand_recorder(
-                item,
-                current_recorder_num,
-                previous_recorder_num,
-                max_string_index,
-            );
+            self.generate_right_hand_recorder(item, max_string_index);
 
             // 将来在这里添加 eGui 进度条更新代码
             // 例如: egui_progress_bar.set_progress(i, total_steps);

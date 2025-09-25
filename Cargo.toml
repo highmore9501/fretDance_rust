@@ -10,3 +10,9 @@ lazy_static = "1.4"
 ndarray = "0.16.1"
 serde_json = "1.0.145"
 serde = {version = "1.0.224",features = ["derive"]}
+
+[profile.dev]
+panic = "unwind"
+
+[profile.release]
+panic = "unwind"

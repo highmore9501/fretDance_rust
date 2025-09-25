@@ -1,6 +1,5 @@
 // right_hand.rs
 use crate::hand::right_finger::RightFingers;
-use ndarray::Array1;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::f64;
@@ -397,56 +396,4 @@ pub fn get_used_fingers(
         .filter(|item| used_strings.contains(&item.string))
         .map(|item| item.finger.clone())
         .collect()
-}
-
-// 由于剩余的函数涉及复杂的数学计算和3D几何操作，需要依赖特定的数学库
-// 这里提供函数签名作为示例：
-
-pub fn new_finger_position_method(
-    avatar_data: &serde_json::Value,
-    right_finger_positions: Vec<i32>,
-    is_arpeggio: bool,
-    is_after_played: bool,
-    hand_position: f64,
-    used_right_fingers: Vec<String>,
-    max_string_index: i32,
-) -> HashMap<String, Vec<f64>> {
-    // 实现复杂的3D位置计算逻辑
-    // 需要使用ndarray等数学库来处理向量和矩阵运算
-    HashMap::new()
-}
-
-pub fn calculate_right_hand_fingers(
-    avatar_data: &serde_json::Value,
-    right_finger_positions: Vec<i32>,
-    used_right_fingers: Vec<String>,
-    max_string_index: i32,
-    is_after_played: bool,
-) -> HashMap<String, Vec<f64>> {
-    // 实现右手手指位置计算
-    HashMap::new()
-}
-
-pub fn calculate_finger_position_by_hand_position(
-    h_r: Array1<f64>,
-    h3: Array1<f64>,
-    avatar_data: &serde_json::Value,
-    finger_index: usize,
-    string_index: usize,
-) -> (Array1<f64>, f64) {
-    // 实现手指位置计算逻辑
-    (Array1::zeros(3), 0.0)
-}
-
-pub fn euler_to_rotation_matrix(euler_angles: Array1<f64>) -> ndarray::Array2<f64> {
-    // 实现欧拉角到旋转矩阵的转换
-    ndarray::Array2::zeros((3, 3))
-}
-
-pub fn get_transformation_matrix(
-    position: Array1<f64>,
-    euler_angles: Array1<f64>,
-) -> ndarray::Array2<f64> {
-    // 实现变换矩阵计算
-    ndarray::Array2::zeros((4, 4))
 }

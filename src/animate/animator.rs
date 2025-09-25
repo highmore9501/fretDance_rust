@@ -5,6 +5,7 @@ use std::error::Error;
 use std::fs::File;
 use std::io::BufReader;
 
+use crate::hand::left_finger::PressState;
 use crate::midi::midi_to_note::PitchWheelInfo;
 use crate::utils::util_methods::{
     Quaternion, Vector3, add_vectors, get_string_touch_position, lerp_by_fret_quaternion,
@@ -60,7 +61,12 @@ impl Animator {
         max_string_index: f64,
     ) -> Result<Self, Box<dyn Error>> {
         // 读取avatar JSON文件
-        let file = File::open(&avatar)?;
+        let avatar_path = if avatar.ends_with(".json") {
+            avatar.clone()
+        } else {
+            format!("asset/controller_infos/{}.json", avatar)
+        };
+        let file = File::open(avatar_path)?;
         let avatar_info: Value = serde_json::from_reader(file)?;
 
         Ok(Animator {
@@ -91,18 +97,66 @@ impl Animator {
         Some(current)
     }
 
-    /// 添加推弦动画数据
+    /// 在生成动画数据时插入pitchwheel信息
     ///
     /// # 参数
-    /// * `file_path` - 文件路径
-    /// * `pitch_wheel_map` - 推弦信息映射
-    pub fn add_pitchwheel(
+    /// * `hand_dicts` - 已解析的手部数据
+    /// * `pitch_wheel_map` - pitchwheel信息映射
+    ///
+    /// # 返回
+    /// * 包含pitchwheel信息的扩展手部数据
+    fn add_pitchwheel_info(
         &self,
-        file_path: &str,
+        hand_dicts: Vec<Map<String, Value>>,
         pitch_wheel_map: &Vec<PitchWheelInfo>,
-    ) -> Result<(), Box<dyn Error>> {
-        // 实现添加推弦逻辑
-        todo!("这个应该写在animate 模块中")
+    ) -> Result<Vec<Map<String, Value>>, Box<dyn Error>> {
+        let mut new_data = Vec::new();
+
+        for i in 0..hand_dicts.len() {
+            let mut new_item = hand_dicts[i].clone();
+            // 默认pitchwheel值为0
+            new_item.insert(
+                "pitchwheel".to_string(),
+                Value::Number(serde_json::Number::from(0)),
+            );
+            new_data.push(new_item.clone());
+
+            if i != hand_dicts.len() - 1 {
+                let recorder_tick = hand_dicts[i]
+                    .get("real_tick")
+                    .and_then(|v| v.as_f64())
+                    .ok_or("Missing real_tick in item")?;
+
+                let next_tick = hand_dicts[i + 1]
+                    .get("real_tick")
+                    .and_then(|v| v.as_f64())
+                    .ok_or("Missing real_tick in next item")?;
+
+                for pitch_wheel_item in pitch_wheel_map {
+                    let tick = pitch_wheel_item.real_tick;
+                    if recorder_tick <= tick && tick <= next_tick {
+                        let mut insert_item = new_item.clone();
+                        insert_item.insert(
+                            "real_tick".to_string(),
+                            Value::Number(serde_json::Number::from_f64(tick).unwrap()),
+                        );
+                        insert_item.insert(
+                            "frame".to_string(),
+                            Value::Number(
+                                serde_json::Number::from_f64(pitch_wheel_item.frame).unwrap(),
+                            ),
+                        );
+                        insert_item.insert(
+                            "pitchwheel".to_string(),
+                            Value::Number(serde_json::Number::from(pitch_wheel_item.pitchwheel)),
+                        );
+                        new_data.push(insert_item);
+                    }
+                }
+            }
+        }
+
+        Ok(new_data)
     }
 
     /// 将左手数据转换为动画
@@ -195,6 +249,19 @@ impl Animator {
         let reader = BufReader::new(file);
         let hand_dicts: Vec<Map<String, Value>> = serde_json::from_reader(reader)?;
 
+        // 如果有pitchwheel信息，则添加到数据中
+        let hand_dicts = if let Some(pitch_wheel_map) = self.get_avatar_field("PITCH_WHEEL_MAP") {
+            if let Ok(pitch_wheel_vec) =
+                serde_json::from_value::<Vec<PitchWheelInfo>>(pitch_wheel_map.clone())
+            {
+                self.add_pitchwheel_info(hand_dicts, &pitch_wheel_vec)?
+            } else {
+                hand_dicts
+            }
+        } else {
+            hand_dicts
+        };
+
         let mut data_for_animation = Vec::new();
         let mut init_state = None;
 
@@ -237,12 +304,12 @@ impl Animator {
 
                 // 对比当前手势和下一个手势，找出来姿势切换时需要抬指的手指
                 let current_hand = item
-                    .get("leftHand")
+                    .get("left_hand")
                     .and_then(|v| v.as_array())
                     .ok_or("Missing leftHand in item")?;
 
                 let next_hand = next_item
-                    .get("leftHand")
+                    .get("left_hand")
                     .and_then(|v| v.as_array())
                     .ok_or("Missing leftHand in next item")?;
 
@@ -250,11 +317,11 @@ impl Animator {
                 for finger in current_hand {
                     let finger_obj = finger.as_object().ok_or("Finger is not an object")?;
                     let finger_index = finger_obj
-                        .get("fingerIndex")
+                        .get("finger_index")
                         .and_then(|v| v.as_i64())
                         .ok_or("Missing fingerIndex")?;
 
-                    let finger_info = finger_obj.get("fingerInfo").ok_or("Missing fingerInfo")?;
+                    let finger_info = finger_obj.get("finger_info").ok_or("Missing fingerInfo")?;
 
                     current_finger_dict.insert(finger_index, finger_info);
                 }
@@ -263,11 +330,11 @@ impl Animator {
                 for finger in next_hand {
                     let finger_obj = finger.as_object().ok_or("Finger is not an object")?;
                     let finger_index = finger_obj
-                        .get("fingerIndex")
+                        .get("finger_index")
                         .and_then(|v| v.as_i64())
                         .ok_or("Missing fingerIndex")?;
 
-                    let finger_info = finger_obj.get("fingerInfo").ok_or("Missing fingerInfo")?;
+                    let finger_info = finger_obj.get("finger_info").ok_or("Missing fingerInfo")?;
 
                     next_finger_dict.insert(finger_index, finger_info);
                 }
@@ -396,7 +463,7 @@ impl Animator {
             }
 
             let left_hand = item
-                .get("leftHand")
+                .get("left_hand")
                 .and_then(|v| v.as_array())
                 .ok_or("Missing or invalid leftHand in item")?;
             let frame = item
@@ -410,11 +477,11 @@ impl Animator {
             for finger in left_hand {
                 let finger_obj = finger.as_object().ok_or("Finger is not an object")?;
                 let finger_index = finger_obj
-                    .get("fingerIndex")
+                    .get("finger_index")
                     .and_then(|v| v.as_i64())
                     .unwrap_or(-1);
                 let finger_info = finger_obj
-                    .get("fingerInfo")
+                    .get("finger_info")
                     .and_then(|v| v.as_object())
                     .ok_or("Missing or invalid fingerInfo")?;
 
@@ -423,7 +490,7 @@ impl Animator {
                     .and_then(|v| v.as_f64())
                     .unwrap_or(0.0);
                 let string_index = finger_info
-                    .get("stringIndex")
+                    .get("string_index")
                     .and_then(|v| v.as_i64())
                     .unwrap_or(-1);
 
@@ -599,12 +666,12 @@ impl Animator {
                 .and_then(|v| v.as_f64())
                 .ok_or("Missing frame in data")?;
 
-            let right_hand = data.get("rightHand").ok_or("Missing rightHand in data")?;
+            let right_hand = data.get("right_hand").ok_or("Missing rightHand in data")?;
             let used_fingers = right_hand
-                .get("usedFingers")
+                .get("used_fingers")
                 .ok_or("Missing usedFingers in rightHand")?;
             let right_finger_positions = right_hand
-                .get("rightFingerPositions")
+                .get("right_finger_positions")
                 .ok_or("Missing rightFingerPositions in rightHand")?;
 
             // 这个usedFingers为空，表示是扫弦，所以播放时间要长一些
@@ -1188,15 +1255,97 @@ impl Animator {
     /// # 参数
     /// * `recorder_file` - 记录文件路径
     /// * `string_recorder_file` - 弦记录文件路径
-    /// * `fps` - 帧率
     pub fn animated_guitar_string(
         &self,
         recorder_file: &str,
         string_recorder_file: &str,
-        fps: f64,
     ) -> Result<(), Box<dyn Error>> {
-        // 实现吉他弦动画逻辑
-        todo!("这个应该写在animate 模块中")
+        let elapsed_frame = self.fps / 8.0;
+
+        // 读取记录文件
+        let file = File::open(recorder_file)?;
+        let reader = BufReader::new(file);
+        let hand_dicts: Vec<serde_json::Value> = serde_json::from_reader(reader)?;
+
+        let mut data_for_animation = Vec::new();
+
+        for i in 0..hand_dicts.len() {
+            let item = &hand_dicts[i];
+            let frame = item["frame"].as_f64().unwrap_or(0.0);
+            let left_hand = &item["leftHand"];
+
+            let string_last_frame = if i != hand_dicts.len() - 1 {
+                let next_frame = hand_dicts[i + 1]["frame"].as_f64().unwrap_or(0.0);
+                if next_frame < frame + elapsed_frame {
+                    next_frame
+                } else {
+                    frame + elapsed_frame
+                }
+            } else {
+                frame + elapsed_frame
+            };
+
+            if let Some(fingers) = left_hand.as_array() {
+                for finger_data in fingers {
+                    let finger_index = finger_data["fingerIndex"].as_i64().unwrap_or(-1);
+
+                    let finger_info = &finger_data["fingerInfo"];
+                    let press = finger_info["press"].as_i64().unwrap_or(0);
+
+                    if (press == 0 || press == 5) && finger_index != -1 {
+                        continue;
+                    }
+
+                    let string_index = finger_info["stringIndex"].as_i64().unwrap_or(0);
+                    let fret = if finger_index == -1 {
+                        0
+                    } else {
+                        finger_info["fret"].as_i64().unwrap_or(0)
+                    };
+
+                    let ready = serde_json::json!({
+                        "frame": frame - 1.0,
+                        "stringIndex": string_index,
+                        "fret": fret,
+                        "influence": 0.0
+                    });
+
+                    let start = serde_json::json!({
+                        "frame": frame,
+                        "stringIndex": string_index,
+                        "fret": fret,
+                        "influence": 0.5
+                    });
+
+                    let end = serde_json::json!({
+                        "frame": string_last_frame,
+                        "stringIndex": string_index,
+                        "fret": fret,
+                        "influence": 0.0
+                    });
+
+                    data_for_animation.push(ready);
+                    data_for_animation.push(start);
+                    data_for_animation.push(end);
+
+                    if string_last_frame - frame > 2.0 {
+                        let middle = serde_json::json!({
+                            "frame": (string_last_frame + frame) / 2.0,
+                            "stringIndex": string_index,
+                            "fret": fret,
+                            "influence": 1.0
+                        });
+                        data_for_animation.push(middle);
+                    }
+                }
+            }
+        }
+
+        // 写入弦记录文件
+        let file = File::create(string_recorder_file)?;
+        serde_json::to_writer_pretty(file, &data_for_animation)?;
+
+        Ok(())
     }
 
     pub fn animated_left_hand(
@@ -1208,7 +1357,7 @@ impl Animator {
         disable_barre: bool,
     ) -> Result<Map<String, Value>, Box<dyn std::error::Error>> {
         let left_hand = item
-            .get("leftHand")
+            .get("left_hand")
             .and_then(|v| v.as_array())
             .ok_or("Missing leftHand in item")?;
 
@@ -1239,17 +1388,17 @@ impl Animator {
                 .ok_or("Finger data is not an object")?;
 
             let finger_index = finger_obj
-                .get("fingerIndex")
+                .get("finger_index")
                 .and_then(|v| v.as_i64())
                 .ok_or("Missing fingerIndex")? as i32;
 
             let finger_info = finger_obj
-                .get("fingerInfo")
+                .get("finger_info")
                 .and_then(|v| v.as_object())
                 .ok_or("Missing fingerInfo")?;
 
             let mut string_index = finger_info
-                .get("stringIndex")
+                .get("string_index")
                 .and_then(|v| v.as_f64())
                 .ok_or("Missing stringIndex")?;
 
@@ -1258,10 +1407,12 @@ impl Animator {
                 .and_then(|v| v.as_f64())
                 .ok_or("Missing fret")?;
 
-            let press = finger_info
+            let press_value = finger_info
                 .get("press")
-                .and_then(|v| v.as_i64())
+                .and_then(|v| v.as_str())
                 .ok_or("Missing press")?;
+
+            let press = PressState::from_str(press_value).to_i32();
 
             // skip open string. 空弦音跳过
             if finger_index == -1 {
@@ -1369,7 +1520,7 @@ impl Animator {
                 (
                     self.twice_lerp_barre_vector3("HP_L", "position", hand_fret)?,
                     self.twice_lerp_barre_quaternion(
-                        "H_rotation_L",
+                        "rotation",
                         hand_fret,
                         barre_finger_string_index,
                     )?,
@@ -1985,11 +2136,11 @@ impl Animator {
         } else if hand_state > 0 {
             let (out_p0_array, out_p2_array) = if value_type == "position" {
                 let out_p0_array = self
-                    .get_avatar_nested_field(&["OUTER_LEFT_HAND_POSITIONS", "P0"])
+                    .get_avatar_nested_field(&["OUTER_LEFT_HAND_POSITIONS", "P0", "H_L"])
                     .ok_or("Missing OUTER_LEFT_HAND_POSITIONS/P0 in avatar data")?;
 
                 let out_p2_array = self
-                    .get_avatar_nested_field(&["OUTER_LEFT_HAND_POSITIONS", "P2"])
+                    .get_avatar_nested_field(&["OUTER_LEFT_HAND_POSITIONS", "P2", "H_L"])
                     .ok_or("Missing OUTER_LEFT_HAND_POSITIONS/P2 in avatar data")?;
                 (out_p0_array, out_p2_array)
             } else {
@@ -2035,11 +2186,11 @@ impl Animator {
         } else {
             let (inner_p1_array, inner_p3_array) = if value_type == "position" {
                 let inner_p1_array = self
-                    .get_avatar_nested_field(&["INNER_LEFT_HAND_POSITIONS", "P1"])
+                    .get_avatar_nested_field(&["INNER_LEFT_HAND_POSITIONS", "P1", "H_L"])
                     .ok_or("Missing INNER_LEFT_HAND_POSITIONS/P1 in avatar data")?;
 
                 let inner_p3_array = self
-                    .get_avatar_nested_field(&["INNER_LEFT_HAND_POSITIONS", "P3"])
+                    .get_avatar_nested_field(&["INNER_LEFT_HAND_POSITIONS", "P3", "H_L"])
                     .ok_or("Missing INNER_LEFT_HAND_POSITIONS/P3 in avatar data")?;
 
                 (inner_p1_array, inner_p3_array)
@@ -2736,7 +2887,7 @@ impl Animator {
 
             (p0_quat, p1_quat, p2_quat, p3_quat)
         } else {
-            return Err("Invalid value type".into());
+            return Err("Invalid quaternion value type".into());
         };
 
         let p_fret_02 = lerp_by_fret_quaternion(fret, &p0, &p2);

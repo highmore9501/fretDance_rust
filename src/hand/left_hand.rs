@@ -343,7 +343,7 @@ impl LeftHand {
 
         let mut barre_fingers = Vec::new();
         let mut barre_finger_dict = HashMap::new();
-        let mut barre_string_index = -1;
+        let mut barre_string_index;
         let mut need_barre = false;
         let mut keep_barre = false;
         let use_barre;
@@ -430,10 +430,13 @@ impl LeftHand {
                     std::cmp::min(barre_string_index, guitar.guitar_strings.len() as i32 - 1);
                 PressState::Barre
             } else if touch_count == 2 && *barre_finger_index == 4 {
+                barre_string_index = *barre_string_index_val;
                 PressState::PartialBarre2Strings
             } else if touch_count == 3 && *barre_finger_index == 4 {
+                barre_string_index = *barre_string_index_val;
                 PressState::PartialBarre3Strings
             } else {
+                barre_string_index = *barre_string_index_val;
                 PressState::Pressed
             };
 
