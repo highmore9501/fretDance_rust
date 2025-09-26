@@ -6,9 +6,9 @@
 
 **注意：这是原 FretDance 项目的 Rust 重写版本。原项目地址：[https://github.com/highmore9501/fretDance](https://github.com/highmore9501/fretDance)**
 
-电吉他演奏视频：[芙宁娜-少女的任性](https://www.bilibili.com/video/BV183t9zXEu6/)
+电吉他演奏视频：[芙宁娜-少女绮想曲](https://www.bilibili.com/video/BV183t9zXEu6/)
 
-古典吉他演奏视频：[婕德-鸟儿般的诗](https://www.bilibili.com/video/BV1HmY6zEEwZ/)
+古典吉他演奏视频：[婕德-鸟之诗](https://www.bilibili.com/video/BV1HmY6zEEwZ/)
 
 详细教程和文档请访问我的知乎专栏：[fretDance 专栏](https://www.zhihu.com/column/c_1932748054936684153)
 
