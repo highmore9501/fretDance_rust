@@ -6,9 +6,12 @@
 
 **Note: This is a Rust rewrite of the original FretDance project. Original project: [https://github.com/highmore9501/fretDance](https://github.com/highmore9501/fretDance)**
 
-Electric Guitar Performance Video: [Furina - Maiden's Capriccio](https://www.bilibili.com/video/BV183t9zXEu6/)
+Electric Guitar Performance Video:
+[Furina - Maiden's Capriccio](https://youtu.be/8zbeerTxgmM)
 
-Classical Guitar Performance Video: [Jeht - Bird's Poem](https://www.bilibili.com/video/BV1HmY6zEEwZ/)
+Classical Guitar Performance Video:
+[Jeht - Bird's Poem](https://youtu.be/Vt03JIjESB0)
+[Ayaka Performs "Heron's Oath" on Guitar](https://youtu.be/3SDCxXPheTM)
 
 For detailed tutorials and documentation, please visit my Zhihu Column (知乎专栏): [fretDance Column](https://www.zhihu.com/column/c_1932748054936684153)
 

@@ -110,10 +110,14 @@ pub fn show_parameter_setting(app: &mut FretDanceApp, ui: &mut egui::Ui) {
                 });
             });
 
-            // 右半部分：avatar信息显示
+            // 右半部分：avatar信息显示或编辑界面
             ui.vertical(|ui| {
                 ui.set_width(ui.available_width());
-                avatar_display::show_avatar_info(app, ui);
+                if app.show_edit_avatar_dialog {
+                    avatar_display::show_edit_avatar_interface(app, ui);
+                } else {
+                    avatar_display::show_avatar_info(app, ui);
+                }
             });
         });
     });

@@ -12,8 +12,9 @@ serde_json = "1.0.145"
 serde = {version = "1.0.224", features = ["derive"]}
 egui = "0.28"
 eframe = { version = "0.28", features = ["default"] }
-egui_extras = { version = "0.28", features = ["all_loaders"] }
-image = { version = "0.24", features = ["jpeg", "png"] }
+egui_extras = { version = "0.28", features = ["all_loaders", "image"] }
+image = { version = "0.24", features = ["png", "gif"] }
+rfd = "0.15"
 
 [profile.dev]
 panic = "unwind"

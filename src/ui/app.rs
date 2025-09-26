@@ -16,6 +16,39 @@ pub struct AvatarInfo {
     pub instrument: String,
 }
 
+// 乐器类型枚举
+#[derive(Clone, PartialEq)]
+pub enum InstrumentType {
+    FingerStyleGuitar,
+    Bass,
+    ElectricGuitar,
+}
+
+impl InstrumentType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            InstrumentType::FingerStyleGuitar => "finger_style_guitar",
+            InstrumentType::Bass => "bass",
+            InstrumentType::ElectricGuitar => "electric_guitar",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Self {
+        match s {
+            "bass" => InstrumentType::Bass,
+            "electric_guitar" => InstrumentType::ElectricGuitar,
+            _ => InstrumentType::FingerStyleGuitar,
+        }
+    }
+}
+
+// 编辑Avatar模式枚举
+#[derive(Clone, PartialEq)]
+pub enum EditAvatarMode {
+    New,
+    Edit,
+}
+
 pub struct FretDanceApp {
     // 用户选择的参数
     pub avatar: String,
@@ -41,6 +74,16 @@ pub struct FretDanceApp {
 
     // 删除确认对话框
     pub(crate) show_delete_confirmation: bool,
+
+    // 新增/修改Avatar对话框
+    pub(crate) show_edit_avatar_dialog: bool,
+    pub(crate) edit_avatar_name: String,
+    pub(crate) edit_avatar_image: String,
+    pub(crate) edit_avatar_selected_image_path: String,
+    pub(crate) edit_avatar_json: String,
+    pub(crate) edit_avatar_selected_json_path: String,
+    pub(crate) edit_avatar_instrument: InstrumentType,
+    pub(crate) edit_avatar_mode: EditAvatarMode,
 
     // 主题设置
     pub(crate) dark_mode: bool,
@@ -83,6 +126,14 @@ impl FretDanceApp {
             avatar_infos: Vec::new(),
             current_avatar_info: None,
             show_delete_confirmation: false,
+            show_edit_avatar_dialog: false,
+            edit_avatar_name: String::new(),
+            edit_avatar_image: String::new(),
+            edit_avatar_selected_image_path: String::new(),
+            edit_avatar_json: String::new(),
+            edit_avatar_selected_json_path: String::new(),
+            edit_avatar_instrument: InstrumentType::FingerStyleGuitar,
+            edit_avatar_mode: EditAvatarMode::New,
             console_output: String::new(),
             dark_mode: true,
             midi_info_result: String::new(),
