@@ -39,6 +39,9 @@ pub struct FretDanceApp {
     pub(crate) avatar_infos: Vec<AvatarInfo>,
     pub(crate) current_avatar_info: Option<AvatarInfo>,
 
+    // 删除确认对话框
+    pub(crate) show_delete_confirmation: bool,
+
     // 主题设置
     pub(crate) dark_mode: bool,
 
@@ -79,6 +82,7 @@ impl FretDanceApp {
             midi_options: Vec::new(),
             avatar_infos: Vec::new(),
             current_avatar_info: None,
+            show_delete_confirmation: false,
             console_output: String::new(),
             dark_mode: true,
             midi_info_result: String::new(),

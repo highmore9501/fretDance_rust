@@ -20,10 +20,6 @@ pub enum HandRecorder {
     Right(RightHandRecorder),
 }
 
-// 在 recorder_pool.rs 文件中进行如下修改：
-
-// 首先将 trait 定义移到 impl 块外面，并修复实现
-/// 用于访问 hand_pose_list 的 trait
 pub trait HasHandPoseList<T> {
     fn hand_pose_list(&self) -> &Vec<T>;
 }
