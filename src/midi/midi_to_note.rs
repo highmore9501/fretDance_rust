@@ -326,7 +326,7 @@ impl MidiProcessor {
             let track = &smf.tracks[track_index as usize];
             let mut note = Vec::new();
             let mut real_tick: f64 = 0.0;
-            let mut pre_tick: f64 = 0.0;
+            let mut current_tick: f64 = 0.0; // 当前正在处理的音符时间点
 
             for event in track {
                 let ticks = event.delta.as_int() as f64;
@@ -344,43 +344,53 @@ impl MidiProcessor {
 
                             match message {
                                 midly::MidiMessage::NoteOn { key, .. } => {
-                                    let mut note_value = key.as_int() as i32;
+                                    // 如果当前时间与之前记录的时间不同，说明是新的一组音符
+                                    if current_tick != real_tick && !note.is_empty() {
+                                        // 保存之前收集的音符
+                                        note.sort();
+                                        notes_map.push(NoteInfo {
+                                            notes: note.clone(),
+                                            real_tick: current_tick,
+                                        });
+                                        note.clear(); // 重置音符列表
+                                    }
 
+                                    // 更新当前时间点
+                                    current_tick = real_tick;
+
+                                    // 添加新音符
+                                    let mut note_value = key.as_int() as i32;
                                     if octave_down_checkbox {
                                         note_value -= 12;
                                     }
-
                                     note_value -= capo_number;
                                     note.push(note_value);
                                 }
                                 midly::MidiMessage::PitchBend { bend } => {
                                     pitch_wheel_map.push(PitchWheelInfo {
                                         pitchwheel: bend.0.as_int() as i16,
-                                        real_tick: pre_tick,
+                                        real_tick,
                                         frame: self.calculate_frame(
                                             &tempo_changes,
                                             ticks_per_beat,
                                             fps,
-                                            pre_tick,
+                                            real_tick,
                                         ),
                                     });
                                 }
                                 _ => {
-                                    // 结束音符的收集
+                                    // 处理非note_on事件，如果当前有音符则保存
                                     if !note.is_empty() {
-                                        // 将note里的元素按大小排序
                                         note.sort();
                                         notes_map.push(NoteInfo {
                                             notes: note.clone(),
-                                            real_tick: pre_tick,
+                                            real_tick: current_tick,
                                         });
                                         note.clear();
                                     }
                                 }
                             }
                         }
-
-                        pre_tick = real_tick;
                     }
                     _ => {}
                 }
@@ -391,7 +401,7 @@ impl MidiProcessor {
                 note.sort();
                 notes_map.push(NoteInfo {
                     notes: note,
-                    real_tick: pre_tick,
+                    real_tick: current_tick,
                 });
             }
         }
@@ -403,7 +413,6 @@ impl MidiProcessor {
 
         Ok((notes_map, pitch_wheel_map, messages))
     }
-
     pub fn processed_notes(&self, chord_notes: &[i32], min: i32, max: i32) -> Vec<i32> {
         let compressed = self.compress_notes(chord_notes, min, max);
         self.simplify_notes(&compressed)
