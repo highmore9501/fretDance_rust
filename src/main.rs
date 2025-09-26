@@ -1,18 +1,9 @@
-// main.rs 或 fret_dancer.rs
+use crate::ui::app::FretDanceApp;
+use eframe::NativeOptions;
 use fret_dance_rust::*;
 
-use crate::egui::FretDanceApp;
-use crate::fret_dancer::FretDancer;
-
 fn main() {
-    // 启动GUI应用
-    let native_options = eframe::NativeOptions {
-        viewport: eframe::egui::ViewportBuilder::default()
-            .with_inner_size([800.0, 600.0])
-            .with_min_inner_size([300.0, 220.0]),
-        ..Default::default()
-    };
-
+    let native_options = NativeOptions::default();
     eframe::run_native(
         "Fret Dance",
         native_options,

@@ -9,9 +9,11 @@ rand = "0.8"
 lazy_static = "1.4"
 ndarray = "0.16.1"
 serde_json = "1.0.145"
-serde = {version = "1.0.224",features = ["derive"]}
+serde = {version = "1.0.224", features = ["derive"]}
 egui = "0.28"
-eframe = "0.28"
+eframe = { version = "0.28", features = ["default"] }
+egui_extras = { version = "0.28", features = ["all_loaders"] }
+image = { version = "0.24", features = ["jpeg", "png"] }
 
 [profile.dev]
 panic = "unwind"

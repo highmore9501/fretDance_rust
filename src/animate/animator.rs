@@ -874,7 +874,8 @@ impl Animator {
         let p0 = self.get_avatar_nested_field_as_f64_vector(&["LEFT_FINGER_POSITIONS", "P0"])?;
         let p1 = self.get_avatar_nested_field_as_f64_vector(&["LEFT_FINGER_POSITIONS", "P1"])?;
         let p0_p1_diff = subtract_vectors(&p0, &p1);
-        let finger_move_distance_while_play = vector_norm(&p0_p1_diff) / 8.0;
+        let finger_move_distance_while_play =
+            0.725 * vector_norm(&p0_p1_diff) / (self.max_string_index + 1.0);
 
         // 大拇指的移动方向以及其它手指的移动方向，一开始设置为None
         let mut t_move: Option<Vec<f64>> = None;

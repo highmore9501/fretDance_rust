@@ -5,4 +5,5 @@ pub mod guitar;
 pub mod hand;
 pub mod midi;
 pub mod recorder;
+pub mod ui;
 pub mod utils;
