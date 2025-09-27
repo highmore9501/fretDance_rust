@@ -1,274 +1,270 @@
 use crate::ui::app::{EditAvatarMode, FretDanceApp, InstrumentType};
 use crate::utils::compare_json::compare_json_structure;
 use eframe::egui;
-use std::fs;
-use std::path::Path;
 
 /// 显示Avatar信息
 pub fn show_avatar_info(app: &mut FretDanceApp, ui: &mut egui::Ui) {
-    ui.group(|ui| {
-        ui.heading("Avatar信息");
-        ui.separator();
+    egui::Frame::group(ui.style())
+        .rounding(6.0) // 添加圆角
+        .inner_margin(egui::Margin::same(10.0)) // 增加内边距
+        .show(ui, |ui| {
+            ui.vertical(|ui| {
+                ui.heading("Avatar信息");
+                ui.separator();
 
-        // 显示avatar图片
-        ui.vertical_centered(|ui| {
-            // 尝试显示avatar图片，如果没有则显示默认图片
-            let image_path = if let Some(ref avatar_info) = app.current_avatar_info {
-                if avatar_info.image != "default.png" && !avatar_info.image.is_empty() {
-                    format!("asset/img/{}", avatar_info.image)
-                } else {
-                    "asset/img/default.png".to_string()
-                }
-            } else {
-                "asset/img/default.png".to_string()
-            };
-
-            // 加载并显示图片
-            show_avatar_image(ui, &image_path);
-        });
-
-        ui.add_space(10.0);
-
-        // 显示avatar使用的乐器
-        if let Some(ref avatar_info) = app.current_avatar_info {
-            ui.horizontal(|ui| {
-                ui.label("乐器:");
-                ui.colored_label(
-                    egui::Color32::from_rgb(100, 200, 100),
-                    &avatar_info.instrument,
-                );
-            });
-        } else {
-            ui.horizontal(|ui| {
-                ui.label("乐器:");
-                ui.colored_label(egui::Color32::from_rgb(100, 200, 100), "未知");
-            });
-        }
-
-        ui.add_space(20.0);
-
-        // 按钮行
-        ui.horizontal(|ui| {
-            let button_width = (ui.available_width() - 30.0) / 3.0; // 计算每个按钮的宽度，留出间距
-
-            let widget_modify_button = egui::Button::new("修改")
-                .fill(
-                    egui::Color32::from_hex("#849204ff")
-                        .unwrap_or(egui::Color32::from_rgb(249, 91, 137)),
-                )
-                .stroke(egui::Stroke::new(1.0, egui::Color32::WHITE));
-
-            let widget_new_button = egui::Button::new("新增")
-                .fill(
-                    egui::Color32::from_hex("#0fc508ff")
-                        .unwrap_or(egui::Color32::from_rgb(249, 91, 137)),
-                ) // 蓝色背景
-                .stroke(egui::Stroke::new(1.0, egui::Color32::WHITE));
-
-            let widget_delete_button = egui::Button::new("删除")
-                .fill(
-                    egui::Color32::from_hex("#c4063cff")
-                        .unwrap_or(egui::Color32::from_rgb(249, 91, 137)),
-                ) // 蓝色背景
-                .stroke(egui::Stroke::new(1.0, egui::Color32::WHITE));
-
-            if ui
-                .add_sized([button_width, 20.0], widget_modify_button)
-                .clicked()
-            {
-                // 准备修改数据
-                prepare_edit_avatar(app, EditAvatarMode::Edit);
-            }
-
-            ui.add_space(10.0);
-
-            if ui
-                .add_sized([button_width, 20.0], widget_new_button)
-                .clicked()
-            {
-                // 准备新增数据
-                prepare_edit_avatar(app, EditAvatarMode::New);
-            }
-
-            ui.add_space(10.0);
-
-            if ui
-                .add_sized([button_width, 20.0], widget_delete_button)
-                .clicked()
-            {
-                // 设置删除确认标志，实际的删除操作将在确认对话框中处理
-                app.show_delete_confirmation = true;
-            }
-
-            ui.add_space(10.0);
-        });
-
-        // 显示删除确认对话框
-        if app.show_delete_confirmation {
-            egui::Window::new("确认删除")
-                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-                .show(ui.ctx(), |ui| {
-                    let avatar_name = app.avatar.clone();
-                    ui.label(format!("确定要删除Avatar \"{}\" 吗？", avatar_name));
-                    ui.label("此操作不可撤销。");
-                    ui.horizontal(|ui| {
-                        if ui.button("取消").clicked() {
-                            app.show_delete_confirmation = false;
+                // 显示avatar图片
+                ui.vertical_centered(|ui| {
+                    // 尝试显示avatar图片，如果没有则显示默认图片
+                    let image_path = if let Some(ref avatar_info) = app.current_avatar_info {
+                        if avatar_info.image != "default.png" && !avatar_info.image.is_empty() {
+                            format!("asset/img/{}", avatar_info.image)
+                        } else {
+                            "asset/img/default.png".to_string()
                         }
-                        if ui.button("确认删除").clicked() {
-                            match app.delete_avatar(&avatar_name) {
-                                Ok(()) => {
-                                    app.console_output
-                                        .push_str(&format!("成功删除Avatar: {}\n", avatar_name));
-                                }
-                                Err(e) => {
-                                    app.console_output
-                                        .push_str(&format!("删除Avatar失败: {}\n", e));
-                                }
-                            }
-                            app.show_delete_confirmation = false;
-                        }
-                    });
+                    } else {
+                        "asset/img/default.png".to_string()
+                    };
+
+                    // 加载并显示图片
+                    show_avatar_image(ui, &image_path);
                 });
-        }
-    });
+
+                ui.add_space(10.0);
+
+                // 显示avatar使用的乐器
+                if let Some(ref avatar_info) = app.current_avatar_info {
+                    ui.horizontal(|ui| {
+                        ui.label("乐器:");
+                        ui.colored_label(
+                            egui::Color32::from_rgb(100, 200, 100),
+                            &avatar_info.instrument,
+                        );
+                    });
+                } else {
+                    ui.horizontal(|ui| {
+                        ui.label("乐器:");
+                        ui.colored_label(egui::Color32::from_rgb(100, 200, 100), "未知");
+                    });
+                }
+
+                ui.add_space(20.0);
+
+                // 按钮行 - 使用更好的样式
+                ui.horizontal(|ui| {
+                    let button_width = (ui.available_width() - 30.0) / 3.0; // 计算每个按钮的宽度，留出间距
+
+                    let modify_button = egui::Button::new("✏ 修改")
+                        .fill(egui::Color32::from_rgb(138, 43, 226)) // 主色调 - 蓝紫色
+                        .rounding(4.0); // 圆角
+
+                    let new_button = egui::Button::new("➕ 新增")
+                        .fill(egui::Color32::from_rgb(0, 206, 209)) // 青蓝色
+                        .rounding(4.0); // 圆角
+
+                    let delete_button = egui::Button::new("🗑 删除")
+                        .fill(egui::Color32::from_rgb(200, 50, 50)) // 红色
+                        .rounding(4.0); // 圆角
+
+                    if ui.add_sized([button_width, 30.0], modify_button).clicked() {
+                        // 准备修改数据
+                        prepare_edit_avatar(app, EditAvatarMode::Edit);
+                    }
+
+                    ui.add_space(10.0);
+
+                    if ui.add_sized([button_width, 30.0], new_button).clicked() {
+                        // 准备新增数据
+                        prepare_edit_avatar(app, EditAvatarMode::New);
+                    }
+
+                    ui.add_space(10.0);
+
+                    if ui.add_sized([button_width, 30.0], delete_button).clicked() {
+                        // 设置删除确认标志，实际的删除操作将在确认对话框中处理
+                        app.show_delete_confirmation = true;
+                    }
+
+                    ui.add_space(10.0);
+                });
+            });
+
+            // 显示删除确认对话框
+            if app.show_delete_confirmation {
+                egui::Window::new("确认删除")
+                    .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                    .show(ui.ctx(), |ui| {
+                        let avatar_name = app.avatar.clone();
+                        ui.label(format!("确定要删除Avatar \"{}\" 吗？", avatar_name));
+                        ui.label("此操作不可撤销。");
+                        ui.horizontal(|ui| {
+                            if ui.button("❌ 取消").clicked() {
+                                app.show_delete_confirmation = false;
+                            }
+                            if ui.button("✅ 确认删除").clicked() {
+                                match app.delete_avatar(&avatar_name) {
+                                    Ok(()) => {
+                                        app.console_output.push_str(&format!(
+                                            "成功删除Avatar: {}\n",
+                                            avatar_name
+                                        ));
+                                    }
+                                    Err(e) => {
+                                        app.console_output
+                                            .push_str(&format!("删除Avatar失败: {}\n", e));
+                                    }
+                                }
+                                app.show_delete_confirmation = false;
+                            }
+                        });
+                    });
+            }
+        });
 }
 
 /// 显示编辑Avatar界面（替换原显示界面）
 pub fn show_edit_avatar_interface(app: &mut FretDanceApp, ui: &mut egui::Ui) {
-    ui.group(|ui| {
-        let is_new = app.edit_avatar_mode == EditAvatarMode::New;
-        let title = if is_new {
-            "新增Avatar"
-        } else {
-            "修改Avatar"
-        };
-        ui.heading(title);
-        ui.separator();
+    egui::Frame::group(ui.style())
+        .rounding(6.0) // 添加圆角
+        .inner_margin(egui::Margin::same(10.0)) // 增加内边距
+        .show(ui, |ui| {
+            ui.vertical(|ui| {
+                let is_new = app.edit_avatar_mode == EditAvatarMode::New;
+                let title = if is_new {
+                    "新增Avatar"
+                } else {
+                    "修改Avatar"
+                };
+                ui.heading(title);
+                ui.separator();
 
-        // Avatar名字输入框
-        ui.horizontal(|ui| {
-            ui.label("名字:");
-            ui.text_edit_singleline(&mut app.edit_avatar_name);
-        });
-
-        ui.add_space(10.0);
-
-        // 图片路径选择
-        ui.horizontal(|ui| {
-            ui.label("图片:");
-            ui.text_edit_singleline(&mut app.edit_avatar_image);
-            if ui.button("浏览").clicked() {
-                // 创建文件选择对话框
-                let file_path = rfd::FileDialog::new()
-                    .add_filter("图片文件", &["png", "gif"])
-                    .set_directory(".")
-                    .pick_file();
-
-                if let Some(path) = file_path {
-                    app.edit_avatar_image = path.file_name().unwrap().to_string_lossy().to_string();
-                    app.edit_avatar_selected_image_path = path.to_string_lossy().to_string(); // 保存完整路径
-                    println!("Selected file: {}", app.edit_avatar_selected_image_path)
-                }
-            }
-        });
-
-        ui.add_space(10.0);
-
-        // JSON文件路径选择
-        ui.horizontal(|ui| {
-            ui.label("配置:");
-            ui.text_edit_singleline(&mut app.edit_avatar_json);
-            if ui.button("浏览").clicked() {
-                // 创建文件选择对话框
-                let file_path = rfd::FileDialog::new()
-                    .add_filter("JSON文件", &["json"])
-                    .set_directory(".")
-                    .pick_file();
-
-                if let Some(path) = file_path {
-                    app.edit_avatar_json = path.file_name().unwrap().to_string_lossy().to_string();
-                    app.edit_avatar_selected_json_path = path.to_string_lossy().to_string(); // 保存完整路径
-                    println!("Selected JSON file: {}", app.edit_avatar_selected_json_path)
-                }
-            }
-        });
-
-        ui.add_space(10.0);
-
-        // 乐器选择菜单
-        ui.horizontal(|ui| {
-            ui.label("乐器:");
-            egui::ComboBox::from_id_source("instrument_select")
-                .selected_text(app.edit_avatar_instrument.as_str())
-                .show_ui(ui, |ui| {
-                    ui.selectable_value(
-                        &mut app.edit_avatar_instrument,
-                        InstrumentType::FingerStyleGuitar,
-                        "finger_style_guitar",
-                    );
-                    ui.selectable_value(
-                        &mut app.edit_avatar_instrument,
-                        InstrumentType::Bass,
-                        "bass",
-                    );
-                    ui.selectable_value(
-                        &mut app.edit_avatar_instrument,
-                        InstrumentType::ElectricGuitar,
-                        "electric_guitar",
-                    );
+                // Avatar名字输入框
+                ui.horizontal(|ui| {
+                    ui.label("名字:");
+                    ui.text_edit_singleline(&mut app.edit_avatar_name);
                 });
-        });
 
-        ui.add_space(20.0);
+                ui.add_space(10.0);
 
-        // 按钮行
-        ui.horizontal(|ui| {
-            let button_width = (ui.available_width() - 10.0) / 2.0; // 计算每个按钮的宽度，留出间距
+                // 图片路径选择
+                ui.horizontal(|ui| {
+                    ui.label("图片:");
+                    ui.text_edit_singleline(&mut app.edit_avatar_image);
+                    if ui.add(egui::Button::new("📁 浏览")).clicked() {
+                        // 创建文件选择对话框
+                        let file_path = rfd::FileDialog::new()
+                            .add_filter("图片文件", &["png", "gif"])
+                            .set_directory(".")
+                            .pick_file();
 
-            if ui
-                .add_sized([button_width, 20.0], egui::Button::new("取消"))
-                .clicked()
-            {
-                app.show_edit_avatar_dialog = false;
-            }
+                        if let Some(path) = file_path {
+                            app.edit_avatar_image =
+                                path.file_name().unwrap().to_string_lossy().to_string();
+                            app.edit_avatar_selected_image_path =
+                                path.to_string_lossy().to_string(); // 保存完整路径
+                            println!("Selected file: {}", app.edit_avatar_selected_image_path)
+                        }
+                    }
+                });
 
-            if ui
-                .add_sized([button_width, 20.0], egui::Button::new("保存"))
-                .clicked()
-            {
-                // 验证JSON文件
-                match validate_json_file(app) {
-                    Ok(()) => {
-                        match app.save_avatar() {
+                ui.add_space(10.0);
+
+                // JSON文件路径选择
+                ui.horizontal(|ui| {
+                    ui.label("配置:");
+                    ui.text_edit_singleline(&mut app.edit_avatar_json);
+                    if ui.add(egui::Button::new("📁 浏览")).clicked() {
+                        // 创建文件选择对话框
+                        let file_path = rfd::FileDialog::new()
+                            .add_filter("JSON文件", &["json"])
+                            .set_directory(".")
+                            .pick_file();
+
+                        if let Some(path) = file_path {
+                            app.edit_avatar_json =
+                                path.file_name().unwrap().to_string_lossy().to_string();
+                            app.edit_avatar_selected_json_path = path.to_string_lossy().to_string(); // 保存完整路径
+                            println!("Selected JSON file: {}", app.edit_avatar_selected_json_path)
+                        }
+                    }
+                });
+
+                ui.add_space(10.0);
+
+                // 乐器选择菜单
+                ui.horizontal(|ui| {
+                    ui.label("乐器:");
+                    egui::ComboBox::from_id_source("instrument_select")
+                        .selected_text(app.edit_avatar_instrument.as_str())
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(
+                                &mut app.edit_avatar_instrument,
+                                InstrumentType::FingerStyleGuitar,
+                                "finger_style_guitar",
+                            );
+                            ui.selectable_value(
+                                &mut app.edit_avatar_instrument,
+                                InstrumentType::Bass,
+                                "bass",
+                            );
+                            ui.selectable_value(
+                                &mut app.edit_avatar_instrument,
+                                InstrumentType::ElectricGuitar,
+                                "electric_guitar",
+                            );
+                        });
+                });
+
+                ui.add_space(20.0);
+
+                // 按钮行
+                ui.horizontal(|ui| {
+                    let button_width = (ui.available_width() - 10.0) / 2.0; // 计算每个按钮的宽度，留出间距
+
+                    if ui
+                        .add_sized([button_width, 30.0], egui::Button::new("❌ 取消"))
+                        .clicked()
+                    {
+                        app.show_edit_avatar_dialog = false;
+                    }
+
+                    let save_button = egui::Button::new("💾 保存")
+                        .fill(egui::Color32::from_rgb(138, 43, 226)) // 主色调
+                        .rounding(4.0); // 圆角
+
+                    if ui.add_sized([button_width, 30.0], save_button).clicked() {
+                        // 验证JSON文件
+                        match validate_json_file(app) {
                             Ok(()) => {
-                                let action = if is_new { "新增" } else { "修改" };
-                                app.console_output.push_str(&format!(
-                                    "成功{}Avatar: {}\n",
-                                    action, app.edit_avatar_name
-                                ));
-                                app.show_edit_avatar_dialog = false;
+                                match app.save_avatar() {
+                                    Ok(()) => {
+                                        let action = if is_new { "新增" } else { "修改" };
+                                        app.console_output.push_str(&format!(
+                                            "成功{}Avatar: {}\n",
+                                            action, app.edit_avatar_name
+                                        ));
+                                        app.show_edit_avatar_dialog = false;
 
-                                // 重新加载avatar选项
-                                app.load_avatar_options();
+                                        // 重新加载avatar选项
+                                        app.load_avatar_options();
+                                    }
+                                    Err(e) => {
+                                        app.console_output.push_str(&format!(
+                                            "{}Avatar失败: {}\n",
+                                            if is_new { "新增" } else { "修改" },
+                                            e
+                                        ));
+                                    }
+                                }
                             }
                             Err(e) => {
-                                app.console_output.push_str(&format!(
-                                    "{}Avatar失败: {}\n",
-                                    if is_new { "新增" } else { "修改" },
-                                    e
-                                ));
+                                app.console_output
+                                    .push_str(&format!("JSON文件验证失败: {}\n", e));
                             }
                         }
                     }
-                    Err(e) => {
-                        app.console_output
-                            .push_str(&format!("JSON文件验证失败: {}\n", e));
-                    }
-                }
-            }
+                });
+            });
         });
-    });
 }
 
 /// 准备编辑Avatar数据
@@ -329,20 +325,20 @@ fn show_placeholder_image(ui: &mut egui::Ui) {
     egui::Frame::none()
         .fill(egui::Color32::from_gray(30))
         .inner_margin(10.0)
-        .rounding(5.0)
+        .rounding(8.0) // 更大的圆角
         .show(ui, |ui| {
             let (rect, _) =
                 ui.allocate_exact_size(egui::Vec2::new(150.0, 150.0), egui::Sense::hover());
             ui.painter().rect_filled(
                 rect,
-                egui::Rounding::same(5.0),
+                egui::Rounding::same(8.0),
                 egui::Color32::from_gray(50),
             );
             ui.painter().text(
                 rect.center(),
                 egui::Align2::CENTER_CENTER,
-                "无图片",
-                egui::FontId::default(),
+                "🎵 无图片",
+                egui::FontId::proportional(14.0),
                 egui::Color32::WHITE,
             );
         });

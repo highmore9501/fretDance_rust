@@ -420,15 +420,19 @@ impl HandPoseRecordPool {
     }
 
     /// 更新记录器池
-    pub fn update_left_handrecorder_pool(
+    pub fn update_left_handrecorder_pool<F>(
         &mut self,
         guitar: &Guitar,
         notes_map: &Vec<NoteInfo>,
         midi_processor: &MidiProcessor,
         current_recorder_num: &mut usize,
         previous_recorder_num: &mut usize,
-    ) {
-        for guitar_note in notes_map.iter() {
+        callback: F,
+    ) where
+        F: Fn(&str),
+    {
+        let total = notes_map.len();
+        for (index, guitar_note) in notes_map.iter().enumerate() {
             self.generate_left_hand_recorder(
                 guitar_note,
                 guitar,
@@ -436,6 +440,10 @@ impl HandPoseRecordPool {
                 current_recorder_num,
                 previous_recorder_num,
             );
+
+            if index % 10 == 0 {
+                callback(&format!("左手生成进度：{}/{}", index, total));
+            }
         }
     }
 
@@ -613,27 +621,35 @@ impl HandPoseRecordPool {
         }
     }
     // 更新右手记录器池
-    pub fn update_right_hand_recorder_pool(
+    pub fn update_right_hand_recorder_pool<F>(
         &mut self,
         left_hand_recorder_file: &str,
         max_string_index: usize,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+        progress_callback: F,
+    ) -> Result<(), Box<dyn std::error::Error>>
+    where
+        F: Fn(&str),
+    {
         // 读取左手记录文件
         let file = File::open(left_hand_recorder_file)?;
         let reader = BufReader::new(file);
         let data: Vec<serde_json::Value> = serde_json::from_reader(reader)?;
 
         let total_steps = data.len();
+        progress_callback(&format!("开始处理右手数据，共 {} 项", total_steps));
 
         // 遍历数据处理（将来可以在这里添加 eGui 进度条更新逻辑）
         for i in 0..total_steps {
             let item = &data[i];
             self.generate_right_hand_recorder(item, max_string_index);
 
-            // 将来在这里添加 eGui 进度条更新代码
-            // 例如: egui_progress_bar.set_progress(i, total_steps);
+            // 每处理10项报告一次进度
+            if i % 10 == 0 || i == total_steps - 1 {
+                progress_callback(&format!("处理进度: {}/{}", i + 1, total_steps));
+            }
         }
 
+        progress_callback("右手数据处理完成");
         Ok(())
     }
 

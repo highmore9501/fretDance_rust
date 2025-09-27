@@ -1,7 +1,6 @@
 use crate::ui::app::FretDanceApp;
 use crate::ui::avatar_display;
 use eframe::egui;
-use std::path::Path;
 
 pub fn show_parameter_setting(app: &mut FretDanceApp, ui: &mut egui::Ui) {
     // 创建一个滚动区域以容纳所有控件
@@ -12,102 +11,97 @@ pub fn show_parameter_setting(app: &mut FretDanceApp, ui: &mut egui::Ui) {
                 ui.set_width(ui.available_width() * 0.5);
 
                 // 第一部分：用户输入参数
-                ui.group(|ui| {
-                    ui.heading("1. 参数设置");
-                    ui.separator();
+                egui::Frame::group(ui.style())
+                    .rounding(6.0) // 添加圆角
+                    .inner_margin(egui::Margin::same(10.0)) // 增加内边距
+                    .show(ui, |ui| {
+                        ui.vertical(|ui| {
+                            ui.heading("角色参数设置");
+                            ui.separator();
 
-                    // Avatar选择
-                    ui.horizontal(|ui| {
-                        ui.label("Avatar:");
-                        let response = egui::ComboBox::from_id_source("avatar_select")
-                            .selected_text(&app.avatar)
-                            .show_ui(ui, |ui| {
-                                for option in &app.avatar_options {
-                                    ui.selectable_value(&mut app.avatar, option.clone(), option);
+                            // Avatar选择
+                            ui.horizontal(|ui| {
+                                ui.label("Avatar:");
+                                let response = egui::ComboBox::from_id_source("avatar_select")
+                                    .selected_text(&app.avatar)
+                                    .show_ui(ui, |ui| {
+                                        for option in &app.avatar_options {
+                                            ui.selectable_value(
+                                                &mut app.avatar,
+                                                option.clone(),
+                                                option,
+                                            );
+                                        }
+                                    });
+
+                                // 当avatar选择改变时更新avatar信息
+                                if let Some(_) = response.inner {
+                                    app.update_current_avatar_info();
+
+                                    ui.ctx().request_repaint(); // 请求立即重绘
                                 }
                             });
 
-                        // 当avatar选择改变时更新avatar信息
-                        if let Some(_) = response.inner {
-                            app.update_current_avatar_info();
+                            // FPS输入
+                            ui.horizontal(|ui| {
+                                ui.label("FPS:");
+                                ui.add(egui::DragValue::new(&mut app.fps).speed(1.0));
+                            });
 
-                            ui.ctx().request_repaint(); // 请求立即重绘
-                        }
-                    });
+                            // 吉他弦音高设置
+                            ui.label("吉他弦音高 (从最细的弦到最粗的弦):");
+                            // 添加预设调弦下拉菜单
+                            ui.horizontal(|ui| {
+                                ui.label("常用调弦:");
+                                egui::ComboBox::from_id_source("preset_tuning")
+                                    .selected_text("选择预设调弦")
+                                    .show_ui(ui, |ui| {
+                                        for preset in &app.tuning_presets {
+                                            if ui.selectable_label(false, &preset.name).clicked() {
+                                                app.guitar_string_notes = preset.notes.clone();
+                                            }
+                                        }
+                                    });
 
-                    // MIDI文件选择
-                    ui.horizontal(|ui| {
-                        ui.label("MIDI文件:");
-                        egui::ComboBox::from_id_source("midi_select")
-                            .selected_text({
-                                // 显示文件名而不是完整路径
-                                Path::new(&app.midi_file_path)
-                                    .file_name()
-                                    .and_then(|name| name.to_str())
-                                    .unwrap_or(&app.midi_file_path)
-                                    .to_string()
-                            })
-                            .show_ui(ui, |ui| {
-                                for option in &app.midi_options {
-                                    let full_path = format!("asset/midi/{}", option);
-                                    ui.selectable_value(&mut app.midi_file_path, full_path, option);
+                                // 添加增减弦数按钮，使用更好的样式
+                                ui.separator();
+                                if ui.add(egui::Button::new(" ➕ 增加弦数")).clicked() {
+                                    app.guitar_string_notes.push("".to_string());
+                                }
+
+                                if ui.add(egui::Button::new(" ➖ 减少弦数")).clicked()
+                                    && app.guitar_string_notes.len() > 1
+                                {
+                                    app.guitar_string_notes.pop();
                                 }
                             });
-                    });
 
-                    // Track Numbers输入
-                    ui.horizontal(|ui| {
-                        ui.label("轨道号 (逗号分隔):");
-                        ui.text_edit_singleline(&mut app.track_numbers_str);
-                    });
+                            // 动态生成弦数和音高设置
+                            for (i, note) in app.guitar_string_notes.iter_mut().enumerate() {
+                                ui.horizontal(|ui| {
+                                    ui.label(format!("第{}弦", i + 1));
+                                    ui.text_edit_singleline(note);
+                                });
+                            }
 
-                    // Channel Number输入
-                    ui.horizontal(|ui| {
-                        ui.label("通道号:");
-                        ui.add(egui::DragValue::new(&mut app.channel_number));
-                    });
+                            // Octave down checkbox
+                            ui.checkbox(&mut app.octave_down_checkbox, "降低八度");
 
-                    // FPS输入
-                    ui.horizontal(|ui| {
-                        ui.label("FPS:");
-                        ui.add(egui::DragValue::new(&mut app.fps).speed(1.0));
-                    });
+                            // Capo number输入
+                            ui.horizontal(|ui| {
+                                ui.label("变调夹位置:");
+                                ui.add(egui::DragValue::new(&mut app.capo_number).range(0..=12));
+                            });
 
-                    // 吉他弦音高设置
-                    ui.label("吉他弦音高 (从最细的弦到最粗的弦):");
-                    for (i, note) in app.guitar_string_notes.iter_mut().enumerate() {
-                        ui.horizontal(|ui| {
-                            let string_names = ["1弦", "2弦", "3弦", "4弦", "5弦", "6弦"];
-                            ui.label(string_names[i]);
-                            ui.text_edit_singleline(note);
+                            // Use harm notes checkbox
+                            ui.checkbox(&mut app.use_harm_notes, "使用泛音");
+
+                            // Use harm notes checkbox
+                            ui.checkbox(&mut app.disable_barre, "禁用横按");
                         });
-                    }
-
-                    // Octave down checkbox
-                    ui.checkbox(&mut app.octave_down_checkbox, "降低八度");
-
-                    // Capo number输入
-                    ui.horizontal(|ui| {
-                        ui.label("变调夹位置:");
-                        ui.add(egui::DragValue::new(&mut app.capo_number).range(0..=12));
                     });
-
-                    // Use harm notes checkbox
-                    ui.checkbox(&mut app.use_harm_notes, "使用泛音");
-                });
 
                 ui.add_space(10.0);
-
-                // 控制台输出部分
-                ui.group(|ui| {
-                    ui.heading("2. 控制台输出");
-                    ui.separator();
-                    egui::ScrollArea::vertical()
-                        .max_height(200.0)
-                        .show(ui, |ui| {
-                            ui.monospace(&app.console_output);
-                        });
-                });
             });
 
             // 右半部分：avatar信息显示或编辑界面
@@ -120,5 +114,39 @@ pub fn show_parameter_setting(app: &mut FretDanceApp, ui: &mut egui::Ui) {
                 }
             });
         });
+
+        // 控制台输出部分
+        egui::Frame::group(ui.style())
+            .rounding(6.0) // 添加圆角
+            .inner_margin(egui::Margin::same(10.0)) // 增加内边距
+            .show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.vertical(|ui| {
+                    ui.heading("控制台输出");
+                    ui.separator();
+
+                    egui::ScrollArea::vertical()
+                        .stick_to_bottom(true)
+                        .max_height(150.0) // 限制最大高度
+                        .show(ui, |ui| {
+                            // 使用等宽字体显示控制台输出，并添加颜色区分
+                            let output_lines: Vec<&str> = app.console_output.lines().collect();
+                            for line in output_lines {
+                                if line.contains("成功") || line.contains("完成") {
+                                    ui.colored_label(egui::Color32::from_rgb(100, 200, 100), line); // 绿色表示成功
+                                } else if line.contains("失败") || line.contains("错误") {
+                                    ui.colored_label(egui::Color32::from_rgb(200, 100, 100), line); // 红色表示错误
+                                } else if line.contains("警告") {
+                                    ui.colored_label(egui::Color32::from_rgb(200, 200, 100), line); // 黄色表示警告
+                                } else {
+                                    ui.monospace(line);
+                                }
+                            }
+                        });
+                });
+
+                // 强制在下一帧重绘
+                ui.ctx().request_repaint();
+            });
     });
 }

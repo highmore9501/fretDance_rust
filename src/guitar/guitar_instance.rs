@@ -8,7 +8,7 @@ pub struct HarmonicNote {
     pub fret: i32,
     pub note: i32,
 }
-
+#[derive(Clone)]
 pub struct Guitar {
     pub string_distance: f64,
     pub full_string: f64,

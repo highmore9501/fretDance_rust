@@ -33,7 +33,7 @@ pub struct Animator {
     /// 人物信息 (动态JSON数据)
     avatar_info: Value,
     /// 人物信息文件路径 (JSON格式)
-    avatar: String,
+    avatar_file: String,
     /// 左手指法数据文件路径 (JSON格式)
     left_hand_recorder_file: String,
     /// 输出动画文件路径 (JSON格式)
@@ -54,24 +54,24 @@ impl Animator {
     /// * `fps` - 动画帧率
     /// * `max_string_index` - 乐器最大弦索引
     pub fn new(
-        avatar: String,
+        avatar_file: String,
         left_hand_recorder_file: String,
         animation_file: String,
         fps: f64,
         max_string_index: f64,
     ) -> Result<Self, Box<dyn Error>> {
         // 读取avatar JSON文件
-        let avatar_path = if avatar.ends_with(".json") {
-            avatar.clone()
-        } else {
-            format!("asset/controller_infos/{}.json", avatar)
-        };
+        let avatar_path = format!("asset/controller_infos/{}", avatar_file);
+        println!(
+            "Reading avatar file: {} from avatar_file: {}",
+            avatar_path, avatar_file
+        );
         let file = File::open(avatar_path)?;
         let avatar_info: Value = serde_json::from_reader(file)?;
 
         Ok(Animator {
             avatar_info,
-            avatar,
+            avatar_file,
             left_hand_recorder_file,
             animation_file,
             fps,
@@ -80,8 +80,8 @@ impl Animator {
     }
 
     /// 获取avatar文件路径
-    pub fn avatar(&self) -> &str {
-        &self.avatar
+    pub fn avatar_file(&self) -> &str {
+        &self.avatar_file
     }
     /// 获取avatar数据中的特定字段
     pub fn get_avatar_field(&self, field_name: &str) -> Option<&Value> {
@@ -168,7 +168,7 @@ impl Animator {
     /// * `fps` - 帧率
     /// * `max_string_index` - 最大弦索引
     /// * `is_electric` - 是否为电琴
-    pub fn left_hand_2_animation(&self, is_electric: bool) -> Result<(), Box<dyn Error>> {
+    pub fn left_hand_2_animation(&self, disable_barre: bool) -> Result<(), Box<dyn Error>> {
         // 这是人物按下弦需要的时间，还是挺快的
         let press_duration = self.fps / 16.0;
         // 这个就是两个不同姿势之间切换时需要的帧数
@@ -276,7 +276,7 @@ impl Animator {
 
             // 计算当前帧的动画信息（beat状态）
             let current_finger_infos =
-                self.animated_left_hand(item, &normal, pitchwheel, press_distance, is_electric)?;
+                self.animated_left_hand(item, &normal, pitchwheel, press_distance, disable_barre)?;
 
             // 获取需要抬指的手指索引集合
             let mut finger_index_set_need_to_change = std::collections::HashSet::new();
@@ -299,7 +299,7 @@ impl Animator {
                     &normal,
                     next_pitchwheel,
                     press_distance,
-                    is_electric,
+                    disable_barre,
                 )?;
 
                 // 对比当前手势和下一个手势，找出来姿势切换时需要抬指的手指
@@ -386,7 +386,7 @@ impl Animator {
                     &normal,
                     pitchwheel,
                     press_distance,
-                    is_electric,
+                    disable_barre,
                 )?);
 
                 data_for_animation.push(serde_json::json!({
@@ -428,6 +428,11 @@ impl Animator {
         }
 
         // 写入动画文件
+        // 验证 animation_file 路径是否有效
+        if self.animation_file.is_empty() {
+            return Err(format!("无效的动画文件路径: {:?}", self.animation_file).into());
+        }
+
         let file = File::create(self.animation_file.clone())?;
         serde_json::to_writer_pretty(file, &data_for_animation)?;
 
@@ -487,7 +492,8 @@ impl Animator {
 
                 let press = finger_info
                     .get("press")
-                    .and_then(|v| v.as_f64())
+                    .and_then(|v| v.as_str())
+                    .map(|s| PressState::from_str(s).to_i32() as f64)
                     .unwrap_or(0.0);
                 let string_index = finger_info
                     .get("string_index")

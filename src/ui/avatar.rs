@@ -33,6 +33,41 @@ impl FretDanceApp {
             .iter()
             .find(|info| info.name == self.avatar)
             .cloned();
+
+        // 根据乐器类型自动设置调弦预设
+        if let Some(ref avatar_info) = self.current_avatar_info {
+            let instrument_type = avatar_info.instrument.as_str();
+            match instrument_type {
+                "bass" => {
+                    // 如果是bass，设置bass调弦
+                    if let Some(bass_preset) =
+                        self.tuning_presets.iter().find(|p| p.name.contains("Bass"))
+                    {
+                        self.guitar_string_notes = bass_preset.notes.clone();
+                    }
+                }
+                "finger_style_guitar" | "electric_guitar" => {
+                    // 如果是吉他，设置标准吉他调弦
+                    if let Some(guitar_preset) = self
+                        .tuning_presets
+                        .iter()
+                        .find(|p| p.name.contains("标准调弦"))
+                    {
+                        self.guitar_string_notes = guitar_preset.notes.clone();
+                    }
+                }
+                _ => {
+                    // 默认使用标准吉他调弦
+                    if let Some(guitar_preset) = self
+                        .tuning_presets
+                        .iter()
+                        .find(|p| p.name.contains("标准调弦"))
+                    {
+                        self.guitar_string_notes = guitar_preset.notes.clone();
+                    }
+                }
+            }
+        }
     }
 
     pub fn save_avatar(&mut self) -> Result<(), String> {
@@ -75,32 +110,29 @@ impl FretDanceApp {
                 .unwrap_or_else(|| "default.png".to_string());
 
             // 如果图片不在asset/img目录中，需要复制过去
-            // 使用完整路径进行判断和复制操作
-            if !self.edit_avatar_selected_image_path.is_empty()
-                && !self
-                    .edit_avatar_selected_image_path
-                    .starts_with("asset/img/")
-            {
-                let selected_path = Path::new(&self.edit_avatar_selected_image_path);
-                if selected_path.exists() {
-                    let target_path = Path::new("asset/img").join(&filename);
-                    if selected_path != target_path {
-                        // 复制文件到asset/img目录
-                        if let Err(e) = fs::copy(&selected_path, &target_path) {
+            let selected_image_path = if !self.edit_avatar_selected_image_path.is_empty() {
+                Path::new(&self.edit_avatar_selected_image_path).to_path_buf()
+            } else {
+                Path::new(&self.edit_avatar_image).to_path_buf()
+            };
+
+            // 检查文件是否存在且不在目标目录中
+            if selected_image_path.exists() && !selected_image_path.starts_with("asset/img/") {
+                let target_path = Path::new("asset/img").join(&filename);
+                // 将路径都转换为绝对路径后再比较
+                if let (Ok(selected_abs_path), Ok(target_abs_path)) = (
+                    std::fs::canonicalize(&selected_image_path),
+                    std::fs::canonicalize(&target_path),
+                ) {
+                    if selected_abs_path != target_abs_path {
+                        if let Err(e) = fs::copy(&selected_image_path, &target_path) {
                             eprintln!("复制图片文件失败: {}", e);
                         }
                     }
-                }
-            } else if self.edit_avatar_selected_image_path.is_empty()
-                && !self.edit_avatar_image.starts_with("asset/img/")
-            {
-                // 如果只提供了文件名（向后兼容）
-                let selected_path = Path::new(&self.edit_avatar_image);
-                if selected_path.exists() {
-                    let target_path = Path::new("asset/img").join(&filename);
-                    if selected_path != target_path {
-                        // 复制文件到asset/img目录
-                        if let Err(e) = fs::copy(&selected_path, &target_path) {
+                } else {
+                    // 如果无法获取绝对路径，回退到原始比较方法
+                    if selected_image_path != target_path {
+                        if let Err(e) = fs::copy(&selected_image_path, &target_path) {
                             eprintln!("复制图片文件失败: {}", e);
                         }
                     }
@@ -122,31 +154,31 @@ impl FretDanceApp {
                 .unwrap_or_else(|| format!("{}.json", self.edit_avatar_name));
 
             // 如果JSON文件不在asset/controller_infos目录中，需要复制过去
-            // 使用完整路径进行判断和复制操作
-            if !self.edit_avatar_selected_json_path.is_empty()
-                && !self
-                    .edit_avatar_selected_json_path
-                    .starts_with("asset/controller_infos/")
+            let selected_json_path = if !self.edit_avatar_selected_json_path.is_empty() {
+                Path::new(&self.edit_avatar_selected_json_path).to_path_buf()
+            } else {
+                Path::new(&self.edit_avatar_json).to_path_buf()
+            };
+
+            // 检查文件是否存在且不在目标目录中
+            if selected_json_path.exists()
+                && !selected_json_path.starts_with("asset/controller_infos/")
             {
-                let selected_path = Path::new(&self.edit_avatar_selected_json_path);
-                if selected_path.exists() {
-                    let target_path = Path::new("asset/controller_infos").join(&filename);
-                    if selected_path != target_path {
-                        // 复制文件到asset/controller_infos目录
-                        if let Err(e) = fs::copy(&selected_path, &target_path) {
+                let target_path = Path::new("asset/controller_infos").join(&filename);
+                // 将路径都转换为绝对路径后再比较
+                if let (Ok(selected_abs_path), Ok(target_abs_path)) = (
+                    std::fs::canonicalize(&selected_json_path),
+                    std::fs::canonicalize(&target_path),
+                ) {
+                    if selected_abs_path != target_abs_path {
+                        if let Err(e) = fs::copy(&selected_json_path, &target_path) {
                             eprintln!("复制JSON文件失败: {}", e);
                         }
                     }
-                }
-            } else if self.edit_avatar_selected_json_path.is_empty()
-                && !self.edit_avatar_json.starts_with("asset/controller_infos/")
-            {
-                let selected_path = Path::new(&self.edit_avatar_json);
-                if selected_path.exists() {
-                    let target_path = Path::new("asset/controller_infos").join(&filename);
-                    if selected_path != target_path {
-                        // 复制文件到asset/controller_infos目录
-                        if let Err(e) = fs::copy(&selected_path, &target_path) {
+                } else {
+                    // 如果无法获取绝对路径，回退到原始比较方法
+                    if selected_json_path != target_path {
+                        if let Err(e) = fs::copy(&selected_json_path, &target_path) {
                             eprintln!("复制JSON文件失败: {}", e);
                         }
                     }
