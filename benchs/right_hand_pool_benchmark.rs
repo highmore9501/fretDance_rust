@@ -49,7 +49,12 @@ fn benchmark_update_right_hand_recorder_pool(c: &mut Criterion) {
                     // 获取最优解
                     let best_right_hand_pose_record = right_hand_record_pool.get_best_recorder();
                     let best_right_entropy = best_right_hand_pose_record.current_entropy();
+
+                    // 获取最差解以进行对比
+                    let worst_right_hand_pose_record = right_hand_record_pool.get_worst_recorder();
+                    let worst_right_entropy = worst_right_hand_pose_record.current_entropy();
                     eprintln!("最小消耗熵为：{}", best_right_entropy);
+                    eprintln!("最大消耗熵为：{}", worst_right_entropy);
                 }
                 Err(e) => {
                     eprintln!("处理过程中出现错误: {}", e);

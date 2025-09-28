@@ -398,8 +398,11 @@ impl HandPoseRecordPool {
     ) where
         F: Fn(&str),
     {
-        let total = notes_map.len();
-        for (index, guitar_note) in notes_map.iter().enumerate() {
+        let total_steps = notes_map.len();
+        let start_time = Instant::now();
+        let current_time = Instant::now();
+        for i in 0..total_steps {
+            let guitar_note = &notes_map[i];
             self.generate_left_hand_recorder(
                 guitar_note,
                 guitar,
@@ -408,10 +411,28 @@ impl HandPoseRecordPool {
                 previous_recorder_num,
             );
 
-            if index % 10 == 0 {
-                callback(&format!("左手生成进度：{}/{}", index, total));
+            // 每处理10项报告一次进度
+            if i % 10 == 0 || i == total_steps - 1 {
+                let elapsed = current_time.elapsed().as_secs_f64();
+                let speed = if elapsed > 0.0 {
+                    (i + 1) as f64 / elapsed
+                } else {
+                    0.0
+                };
+                callback(&format!(
+                    "处理进度: {}/{} ({:.2} step/秒)",
+                    i + 1,
+                    total_steps,
+                    speed
+                ));
             }
         }
+
+        let end_time = Instant::now();
+        callback(&format!(
+            "左手数据处理完成，一共费时：{:} 秒",
+            end_time.duration_since(start_time).as_secs_f64()
+        ));
     }
 
     pub fn generate_right_hand_recorder(
@@ -540,6 +561,20 @@ impl HandPoseRecordPool {
 
                         let entropy = last_hand.calculate_diff(&right_hand);
                         let new_entropy = right_recorder.current_entropy + entropy;
+
+                        // 检查是否应该插入
+                        let current_hand_pose_record_is_smallest = self.recorders.len() > 0
+                            && new_entropy
+                                <= self.recorders.peek().map_or(f64::MAX, |recorder| {
+                                    recorder.recorder.current_entropy()
+                                });
+
+                        // 如果池子已满且新记录器熵值不小于当前最小熵值，则不插入
+                        if self.recorders.len() == self.capacity
+                            && !current_hand_pose_record_is_smallest
+                        {
+                            continue;
+                        }
 
                         // 创建新的记录器
                         let mut new_hand_pose_list = right_recorder.hand_pose_list.clone();
@@ -771,6 +806,21 @@ impl HandPoseRecordPool {
         self.recorders.into_iter().map(|rr| rr.recorder).collect()
     }
 
+    /// 获取池子中最差的记录器（熵值最大的）
+    pub fn get_worst_recorder(&self) -> &HandRecorder {
+        &self
+            .recorders
+            .iter()
+            .max_by(|a, b| {
+                a.recorder
+                    .current_entropy()
+                    .partial_cmp(&b.recorder.current_entropy())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .expect("Recorder pool should not be empty")
+            .recorder
+    }
+
     pub fn get_best_recorder(&self) -> &HandRecorder {
         &self
             .recorders
@@ -783,6 +833,18 @@ impl HandPoseRecordPool {
             })
             .expect("Recorder pool should not be empty")
             .recorder
+    }
+
+    /// 获取之前记录器中最差的一个（熵值最大的）
+    pub fn get_worst_pre_recorder(&self) -> &HandRecorder {
+        self.pre_recorders
+            .iter()
+            .max_by(|a, b| {
+                a.current_entropy()
+                    .partial_cmp(&b.current_entropy())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .expect("Previous recorders should not be empty")
     }
 
     /// 获取之前记录器中最好的一个（熵值最小的）
