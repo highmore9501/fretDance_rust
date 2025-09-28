@@ -1279,7 +1279,7 @@ impl Animator {
         for i in 0..hand_dicts.len() {
             let item = &hand_dicts[i];
             let frame = item["frame"].as_f64().unwrap_or(0.0);
-            let left_hand = &item["leftHand"];
+            let left_hand = &item["left_hand"];
 
             let string_last_frame = if i != hand_dicts.len() - 1 {
                 let next_frame = hand_dicts[i + 1]["frame"].as_f64().unwrap_or(0.0);
@@ -1294,16 +1294,24 @@ impl Animator {
 
             if let Some(fingers) = left_hand.as_array() {
                 for finger_data in fingers {
-                    let finger_index = finger_data["fingerIndex"].as_i64().unwrap_or(-1);
+                    let finger_index = finger_data["finger_index"].as_i64().unwrap_or(-1);
 
-                    let finger_info = &finger_data["fingerInfo"];
-                    let press = finger_info["press"].as_i64().unwrap_or(0);
+                    let finger_info = &finger_data["finger_info"];
+                    let press_value = match finger_info.get("press").and_then(|v| v.as_str()) {
+                        Some(value) => value,
+                        None => {
+                            println!("Missing press value in finger info：{:?}", finger_info);
+                            continue;
+                        }
+                    };
+
+                    let press = PressState::from_str(press_value).to_i32();
 
                     if (press == 0 || press == 5) && finger_index != -1 {
                         continue;
                     }
 
-                    let string_index = finger_info["stringIndex"].as_i64().unwrap_or(0);
+                    let string_index = finger_info["string_index"].as_i64().unwrap_or(0);
                     let fret = if finger_index == -1 {
                         0
                     } else {
@@ -1348,13 +1356,30 @@ impl Animator {
             }
         }
 
+        // 过滤掉frame值小于0的元素
+        data_for_animation.retain(|item| {
+            if let Some(frame) = item.get("frame").and_then(|v| v.as_f64()) {
+                frame >= 0.0
+            } else {
+                false
+            }
+        });
+
+        // 按frame值进行排序，由低到高
+        data_for_animation.sort_by(|a, b| {
+            let frame_a = a.get("frame").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let frame_b = b.get("frame").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            frame_a
+                .partial_cmp(&frame_b)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
         // 写入弦记录文件
         let file = File::create(string_recorder_file)?;
         serde_json::to_writer_pretty(file, &data_for_animation)?;
 
         Ok(())
     }
-
     pub fn animated_left_hand(
         &self,
         item: &Map<String, Value>,

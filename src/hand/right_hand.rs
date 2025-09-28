@@ -1,6 +1,5 @@
 // right_hand.rs
 use crate::hand::right_finger::RightFingers;
-use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::f64;
 use std::vec::Vec;
