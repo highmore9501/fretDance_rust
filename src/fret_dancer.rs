@@ -331,13 +331,10 @@ impl FretDancer {
                 Some(0),
             );
 
-            let is_play_bass = state.avatar_info.instrument == "bass";
-
             right_hand_record_pool.update_right_hand_recorder_pool(
                 &state.left_hand_recorder_file,
                 state.max_string_index,
                 &progress_callback,
-                is_play_bass,
             )?;
 
             // 获取最优解

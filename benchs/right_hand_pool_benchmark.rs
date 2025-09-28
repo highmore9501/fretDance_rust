@@ -39,7 +39,6 @@ fn benchmark_update_right_hand_recorder_pool(c: &mut Criterion) {
                 |message: &str| {
                     eprintln!("{}", message);
                 },
-                false, // is_play_bass
             );
 
             let duration = start_time.elapsed();

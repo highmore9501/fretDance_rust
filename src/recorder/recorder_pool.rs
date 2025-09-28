@@ -10,7 +10,7 @@ use crate::guitar::guitar_chord::convert_notes_to_chord;
 use crate::guitar::guitar_instance::Guitar;
 use crate::hand::left_finger::PressState;
 use crate::hand::left_hand::{LeftHand, convert_chord_to_finger_positions};
-use crate::hand::right_hand::RightHand;
+use crate::hand::right_hand::{RightHand, RightHandCombination};
 use crate::midi::midi_to_note::{MidiProcessor, NoteInfo, TempoChange};
 use crate::recorder::left_hand_recorder::LeftHandRecorder;
 use crate::recorder::right_hand_recorder::RightHandRecorder;
@@ -414,12 +414,10 @@ impl HandPoseRecordPool {
         }
     }
 
-    /// 生成右手记录器
     pub fn generate_right_hand_recorder(
         &mut self,
         item: &serde_json::Value,
         max_string_index: usize,
-        is_play_bass: bool,
     ) {
         // 获取real_tick
         let real_tick = match item.get("real_tick").and_then(|v| v.as_f64()) {
@@ -434,7 +432,6 @@ impl HandPoseRecordPool {
         };
 
         let mut touched_strings = Vec::new();
-        let mut lower_strings = Vec::new();
 
         // 遍历手指信息
         for finger in left_hand {
@@ -448,31 +445,31 @@ impl HandPoseRecordPool {
                     continue;
                 }
 
-                // 获取按弦类型
-                let press_value = match finger_obj.get("press").and_then(|v| v.as_str()) {
-                    Some(value) => value,
-                    None => {
-                        println!("Missing press value in finger info");
+                if let Some(finger_info) = finger_obj.get("finger_info").and_then(|v| v.as_object())
+                {
+                    // 获取按弦类型
+                    let press_value = match finger_info.get("press").and_then(|v| v.as_str()) {
+                        Some(value) => value,
+                        None => {
+                            println!("Missing press value in finger info：{:?}", finger_info);
+                            continue;
+                        }
+                    };
+
+                    let press = PressState::from_str(&press_value).to_i32();
+
+                    // 检查按弦类型条件（在0到5之间，不包括0和5）
+                    if press <= 0 || press >= 5 {
                         continue;
                     }
-                };
 
-                let press = PressState::from_str(&press_value).to_i32();
+                    // 只有当手指索引和按弦类型都符合条件时才处理弦索引
+                    let string_index = finger_info
+                        .get("string_index")
+                        .and_then(|v| v.as_i64())
+                        .unwrap_or(0);
 
-                // 检查按弦类型（在0到5之间，不包括0和5）
-                if press <= 0 || press >= 5 {
-                    continue;
-                }
-
-                // 只有当手指索引和按弦类型都符合条件时才处理弦索引
-                let string_index = finger_obj
-                    .get("string_index")
-                    .and_then(|v| v.as_i64())
-                    .unwrap_or(0);
-
-                touched_strings.push(string_index as i32);
-                if string_index > 2 {
-                    lower_strings.push(string_index as i32);
+                    touched_strings.push(string_index as i32);
                 }
             }
         }
@@ -494,13 +491,6 @@ impl HandPoseRecordPool {
         // 从高到低排序
         touched_strings.sort_unstable_by(|a, b| b.cmp(a));
 
-        let all_fingers = vec![
-            "p".to_string(),
-            "i".to_string(),
-            "m".to_string(),
-            "a".to_string(),
-        ];
-
         let all_strings: Vec<i32> = (0..=max_string_index as i32).collect();
 
         // 直接处理之前的记录器，避免生成所有组合再处理
@@ -511,12 +501,10 @@ impl HandPoseRecordPool {
             if let HandRecorder::Right(right_recorder) = prev_recorder {
                 if let Some(last_hand) = right_recorder.hand_pose_list.last() {
                     // 为当前情况生成可能的右手组合
-                    let possible_combinations =
-                        crate::hand::right_hand::generate_possible_right_hands(
-                            touched_strings.clone(),
-                            all_fingers.clone(),
-                            all_strings.clone(),
-                        );
+                    let possible_combinations = self.generate_right_hand_combinations(
+                        touched_strings.clone(),
+                        all_strings.clone(),
+                    );
 
                     if possible_combinations.is_empty() {
                         println!(
@@ -541,7 +529,7 @@ impl HandPoseRecordPool {
                             continue;
                         }
 
-                        let is_arpeggio = used_fingers.is_empty();
+                        let is_arpeggio = touched_strings.len() > 4;
                         let right_hand = RightHand::new(
                             used_fingers.clone(),
                             right_finger_positions.clone(),
@@ -587,13 +575,116 @@ impl HandPoseRecordPool {
         // 恢复pre_recorders
         self.pre_recorders = pre_recorders;
     }
-    // 更新右手记录器池
+
+    /// 高效生成右手组合的方法
+    fn generate_right_hand_combinations(
+        &self,
+        touched_strings: Vec<i32>,
+        all_strings: Vec<i32>,
+    ) -> Vec<RightHandCombination> {
+        let mut combinations = Vec::new();
+
+        // 特殊情况：如果触弦数超过4根，使用琶音方式
+        if touched_strings.len() > 4 {
+            combinations.push(RightHandCombination {
+                used_fingers: Vec::new(),
+                right_finger_positions: vec![5, 2, 1, 0],
+            });
+            return combinations;
+        }
+
+        // 生成所有满足条件的组合
+        let mut current_placement = vec![0; 4]; // p, i, m, a 四个手指的位置
+        let mut used_strings = std::collections::HashSet::new();
+        self.generate_combinations_recursive(
+            &touched_strings,
+            &all_strings,
+            &mut current_placement,
+            &mut used_strings,
+            0,
+            &mut combinations,
+        );
+
+        combinations
+    }
+
+    /// 递归生成所有满足条件的组合
+    fn generate_combinations_recursive(
+        &self,
+        touched_strings: &Vec<i32>,
+        all_strings: &Vec<i32>,
+        current_placement: &mut Vec<i32>,
+        used_strings: &mut std::collections::HashSet<i32>,
+        finger_index: usize,
+        combinations: &mut Vec<RightHandCombination>,
+    ) {
+        // 基础情况：所有手指都已经放置
+        if finger_index == 4 {
+            // 检查是否所有touched_strings都被使用
+            let currently_used_strings: std::collections::HashSet<i32> =
+                current_placement.iter().cloned().collect();
+            if touched_strings
+                .iter()
+                .all(|s| currently_used_strings.contains(s))
+            {
+                // 检查手指位置是否满足递减条件
+                if (0..3).all(|i| current_placement[i] >= current_placement[i + 1]) {
+                    // 生成组合
+                    let fingers = vec![
+                        "p".to_string(),
+                        "i".to_string(),
+                        "m".to_string(),
+                        "a".to_string(),
+                    ];
+                    let used_fingers: Vec<String> = fingers
+                        .iter()
+                        .enumerate()
+                        .filter(|(i, _)| touched_strings.contains(&current_placement[*i]))
+                        .map(|(_, f)| f.clone())
+                        .collect();
+
+                    combinations.push(RightHandCombination {
+                        used_fingers,
+                        right_finger_positions: current_placement.clone(),
+                    });
+                }
+            }
+            return;
+        }
+
+        // 对于每个手指，尝试所有可能的弦位置
+        for &string in all_strings {
+            // 检查该弦是否已经被其他手指使用
+            if used_strings.contains(&string) {
+                continue;
+            }
+
+            current_placement[finger_index] = string;
+
+            // 更新已使用的弦集合
+            used_strings.insert(string);
+
+            // 如果不是第一个手指，检查是否满足递减条件
+            if finger_index == 0 || current_placement[finger_index - 1] >= string {
+                self.generate_combinations_recursive(
+                    touched_strings,
+                    all_strings,
+                    current_placement,
+                    used_strings,
+                    finger_index + 1,
+                    combinations,
+                );
+            }
+
+            // 回溯：移除当前手指使用的弦
+            used_strings.remove(&string);
+        }
+    } // 更新右手记录器池
     pub fn update_right_hand_recorder_pool<F>(
         &mut self,
         left_hand_recorder_file: &str,
         max_string_index: usize,
         progress_callback: F,
-        is_play_bass: bool,
     ) -> Result<(), Box<dyn std::error::Error>>
     where
         F: Fn(&str),
@@ -610,7 +701,7 @@ impl HandPoseRecordPool {
 
         for i in 0..total_steps {
             let item = &data[i];
-            self.generate_right_hand_recorder(item, max_string_index, is_play_bass);
+            self.generate_right_hand_recorder(item, max_string_index);
 
             // 每处理10项报告一次进度
             if i % 10 == 0 || i == total_steps - 1 {

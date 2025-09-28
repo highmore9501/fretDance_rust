@@ -126,7 +126,6 @@ impl RightHand {
             } else {
                 // 使用 HashSet 的 insert 方法，如果值已存在会返回 false
                 if !used_string.insert(current_string) {
-                    // 运行到这里说明有两个手指重复拨同一弦
                     println!("Invalid right hand: duplicate finger.");
                     return false;
                 }
@@ -165,30 +164,6 @@ pub fn generate_finger_placements(
     all_strings: Vec<i32>,
 ) -> Vec<Vec<FingerStringPair>> {
     let mut results = Vec::new();
-
-    // 当触弦数超过4根时，使用琶音方式处理
-    if touched_strings.len() > 4 {
-        let placement = vec![
-            FingerStringPair {
-                finger: "p".to_string(),
-                string: 5,
-            },
-            FingerStringPair {
-                finger: "i".to_string(),
-                string: 4,
-            },
-            FingerStringPair {
-                finger: "m".to_string(),
-                string: 3,
-            },
-            FingerStringPair {
-                finger: "a".to_string(),
-                string: 2,
-            },
-        ];
-        results.push(placement);
-        return results;
-    }
 
     // 对触弦按从高到低排序（数值从小到大）
     let mut sorted_touched_strings = touched_strings.clone();
@@ -231,31 +206,38 @@ fn generate_finger_assignments(
 }
 
 fn generate_combinations(indices: &Vec<usize>, k: usize) -> Vec<Vec<usize>> {
-    if k == 0 {
-        return vec![vec![]];
-    }
+    fn generate_combinations_helper(
+        indices: &[usize],
+        k: usize,
+        start: usize,
+        current: &mut Vec<usize>,
+        results: &mut Vec<Vec<usize>>,
+    ) {
+        // 基础情况
+        if k == 0 {
+            results.push(current.clone());
+            return;
+        }
 
-    if indices.len() < k {
-        return vec![];
+        // 如果剩余元素不足，直接返回
+        if start + k > indices.len() {
+            return;
+        }
+
+        // 包含当前元素的情况
+        current.push(indices[start]);
+        generate_combinations_helper(indices, k - 1, start + 1, current, results);
+        current.pop();
+
+        // 不包含当前元素的情况
+        generate_combinations_helper(indices, k, start + 1, current, results);
     }
 
     let mut results = Vec::new();
+    let mut current = Vec::new();
 
-    // 包含第一个元素的情况
-    let first = indices[0];
-    let rest = &indices[1..];
-
-    let sub_combinations = generate_combinations(&rest.to_vec(), k - 1);
-    for mut combo in sub_combinations {
-        let mut new_combo = vec![first];
-        new_combo.append(&mut combo);
-        results.push(new_combo);
-    }
-
-    // 不包含第一个元素的情况
-    if rest.len() >= k {
-        let sub_combinations = generate_combinations(&rest.to_vec(), k);
-        results.extend(sub_combinations);
+    if indices.len() >= k {
+        generate_combinations_helper(indices, k, 0, &mut current, &mut results);
     }
 
     results
@@ -280,25 +262,14 @@ fn generate_string_placements(
     }
 
     // 确定未使用的手指
-    // 统计已使用的手指
-    let mut used_finger_counts = std::collections::HashMap::new();
-    for finger in fingers {
-        *used_finger_counts.entry(finger.as_str()).or_insert(0) += 1;
-    }
-
-    // 标准手指集合
-    let standard_fingers = vec!["p", "i", "m", "a"];
-    let mut unused_fingers = Vec::new();
-
-    // 计算每个标准手指应该有多少个
-    for &finger in &standard_fingers {
-        let needed = 1; // 每个标准手指至少需要1个
-        let used = *used_finger_counts.get(finger).unwrap_or(&0);
-        // 添加缺少的手指
-        for _ in used..needed {
-            unused_fingers.push(finger.to_string());
-        }
-    }
+    let standard_fingers = ["p", "i", "m", "a"];
+    let used_fingers: std::collections::HashSet<&str> =
+        fingers.iter().map(|s| s.as_str()).collect();
+    let unused_fingers: Vec<String> = standard_fingers
+        .iter()
+        .filter(|&&finger| !used_fingers.contains(finger))
+        .map(|&s| s.to_string())
+        .collect();
 
     // 为未使用的手指选择合适的弦（避免使用已触弦的弦）
     let available_strings: Vec<i32> = all_strings
@@ -342,30 +313,6 @@ fn validate_finger_placement(placement: &Vec<FingerStringPair>) -> bool {
 
     let mut sorted_placement = placement.clone();
     sorted_placement.sort_by_key(|p| finger_order.get(&p.finger).unwrap_or(&0));
-
-    // 分组相同手指
-    let mut finger_groups: HashMap<String, Vec<&FingerStringPair>> = HashMap::new();
-    for item in &sorted_placement {
-        finger_groups
-            .entry(item.finger.clone())
-            .or_insert_with(Vec::new)
-            .push(item);
-    }
-
-    for (_finger, items) in &finger_groups {
-        // 对于相同手指，检查它们是否在相邻的弦上
-        if items.len() > 1 {
-            let mut strings: Vec<i32> = items.iter().map(|item| item.string).collect();
-            strings.sort();
-
-            // 检查是否是连续的弦
-            for i in 0..strings.len() - 1 {
-                if strings[i + 1] - strings[i] != 1 {
-                    return false;
-                }
-            }
-        }
-    }
 
     // 检查不同手指间的顺序
     let mut prev_max_string = std::i32::MAX;
@@ -561,7 +508,7 @@ pub fn generate_possible_right_hands(
     // 简化处理：当触弦数超过4根时，使用琶音方式处理
     if touched_strings.len() > 4 {
         let used_fingers: Vec<String> = Vec::new();
-        let right_finger_positions = vec![5, 4, 3, 2];
+        let right_finger_positions = vec![5, 2, 1, 0];
 
         possible_combinations.push(RightHandCombination {
             used_fingers,
