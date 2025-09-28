@@ -35,7 +35,6 @@ impl RightHand {
         &self,
         used_fingers: Option<Vec<String>>,
         right_finger_positions: Option<Vec<i32>>,
-        allow_double_p: bool,
     ) -> bool {
         let positions = match right_finger_positions {
             Some(pos) => pos,
@@ -46,7 +45,7 @@ impl RightHand {
             None => self.used_fingers.clone(),
         };
 
-        self.validate_right_hand_by_finger_positions(&fingers, &positions, allow_double_p)
+        self.validate_right_hand_by_finger_positions(&fingers, &positions)
     }
 
     pub fn calculate_diff(&self, other_right_hand: &RightHand) -> f64 {
@@ -107,7 +106,6 @@ impl RightHand {
         &self,
         used_fingers: &Vec<String>,
         right_finger_positions: &Vec<i32>,
-        allow_double_p: bool,
     ) -> bool {
         for i in 0..right_finger_positions.len().saturating_sub(1) {
             // 检测手指的位置是否从左到右递减，如果手指分布不符合科学，判断为错误;
@@ -116,16 +114,6 @@ impl RightHand {
                 println!("Invalid right hand: finger positions are not in descending order.");
                 return false;
             }
-        }
-
-        // 如果p指数量大于1但是不允许重复使用，那么就直接返回False
-        // 如果手指数量大于4并且不允许重复使用，那么就直接返回False
-        let p_amount = used_fingers.iter().filter(|f| **f == "p").count();
-        if (p_amount > 1 && !allow_double_p)
-            || (right_finger_positions.len() > 4 && !allow_double_p)
-        {
-            println!("Invalid right hand: too many fingers.");
-            return false;
         }
 
         let mut used_string = std::collections::HashSet::new();
@@ -175,7 +163,6 @@ pub fn generate_finger_placements(
     touched_strings: Vec<i32>,
     all_fingers: Vec<String>,
     all_strings: Vec<i32>,
-    allow_double_p: bool,
 ) -> Vec<Vec<FingerStringPair>> {
     let mut results = Vec::new();
 
@@ -208,8 +195,7 @@ pub fn generate_finger_placements(
     sorted_touched_strings.sort_by(|a, b| b.cmp(a));
 
     // 生成所有可能的手指分配方案
-    let finger_assignments =
-        generate_finger_assignments(&all_fingers, &sorted_touched_strings, allow_double_p);
+    let finger_assignments = generate_finger_assignments(&all_fingers, &sorted_touched_strings);
 
     // 为每个手指分配方案生成合理的弦分配
     for assignment in finger_assignments {
@@ -224,7 +210,6 @@ pub fn generate_finger_placements(
 fn generate_finger_assignments(
     all_fingers: &Vec<String>,
     touched_strings: &Vec<i32>,
-    allow_double_p: bool,
 ) -> Vec<Vec<String>> {
     let mut results = Vec::new();
     let n_strings = touched_strings.len();
@@ -237,12 +222,6 @@ fn generate_finger_assignments(
         let mut assignment = Vec::new();
         for &idx in &combination {
             assignment.push(all_fingers[idx].clone());
-        }
-
-        // 验证分配的有效性
-        let p_count = assignment.iter().filter(|&f| f == "p").count();
-        if p_count > 1 && !allow_double_p {
-            continue;
         }
 
         results.push(assignment);
@@ -591,15 +570,10 @@ pub fn generate_possible_right_hands(
         return possible_combinations;
     }
 
-    // 使用更高效的算法生成手指放置方案
-    let allow_double_p =
-        all_strings.len() > 3 && touched_strings.iter().filter(|&&s| s > 2).count() > 1;
-
     let finger_placements = generate_finger_placements(
         touched_strings.clone(),
         all_fingers.clone(),
         all_strings.clone(),
-        allow_double_p,
     );
 
     for placement in finger_placements {

@@ -487,24 +487,12 @@ impl HandPoseRecordPool {
         // 从高到低排序
         touched_strings.sort_unstable_by(|a, b| b.cmp(a));
 
-        // 判断是否允许p指弹两根弦
-        let allow_double_p = max_string_index > 3 && lower_strings.len() > 1 && !is_play_bass;
-        let all_fingers = if allow_double_p {
-            vec![
-                "p".to_string(),
-                "p".to_string(),
-                "i".to_string(),
-                "m".to_string(),
-                "a".to_string(),
-            ]
-        } else {
-            vec![
-                "p".to_string(),
-                "i".to_string(),
-                "m".to_string(),
-                "a".to_string(),
-            ]
-        };
+        let all_fingers = vec![
+            "p".to_string(),
+            "i".to_string(),
+            "m".to_string(),
+            "a".to_string(),
+        ];
 
         let all_strings: Vec<i32> = (0..=max_string_index as i32).collect();
 
@@ -540,7 +528,6 @@ impl HandPoseRecordPool {
                         let is_valid = last_hand.validate_right_hand(
                             Some(used_fingers.clone()),
                             Some(right_finger_positions.clone()),
-                            allow_double_p,
                         );
 
                         if !is_valid {
