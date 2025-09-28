@@ -1,21 +1,13 @@
 use criterion::{Criterion, criterion_group, criterion_main};
-use fret_dance::hand::right_hand::RightHand;
-use fret_dance::recorder::recorder_pool::{HandPoseRecordPool, HandRecorder};
-use fret_dance::recorder::right_hand_recorder::RightHandRecorder;
-use std::fs;
-use std::path::Path;
+use fret_dance_rust::hand::right_hand::RightHand;
+use fret_dance_rust::recorder::recorder_pool::{HandPoseRecordPool, HandRecorder};
+use fret_dance_rust::recorder::right_hand_recorder::RightHandRecorder;
+
+use std::time::Instant;
 
 fn benchmark_update_right_hand_recorder_pool(c: &mut Criterion) {
-    // 创建测试用的左手记录文件
-    let left_hand_recorder_file = "output\\hand_recorder\\Sunburst_1_lefthand_recorder.json";
-
-    // 创建测试用的进度回调函数
-    let progress_callback = |message: &str| {
-        println!("{}", message);
-    };
-
     c.bench_function("update_right_hand_recorder_pool", |b| {
-        b.iter(|| {
+        b.iter_custom(|_| {
             // 初始化右手记录器池
             let init_right_hand = RightHand::new(
                 vec![],
@@ -34,33 +26,40 @@ fn benchmark_update_right_hand_recorder_pool(c: &mut Criterion) {
                 Some(0),
             );
 
+            let left_hand_recorder_file =
+                "output\\hand_recorder\\Sunburst_1_lefthand_recorder.json";
+
             // 执行测试的函数
-            let _ = right_hand_record_pool.update_right_hand_recorder_pool(
+            let start_time = Instant::now();
+            eprintln!("开始更新右手记录器池...");
+
+            let result = right_hand_record_pool.update_right_hand_recorder_pool(
                 left_hand_recorder_file,
                 5, // max_string_index
-                &progress_callback,
+                |message: &str| {
+                    eprintln!("{}", message);
+                },
                 false, // is_play_bass
             );
 
-            // 获取最优解
-            let best_right_hand_pose_record = right_hand_record_pool.get_best_recorder();
-            let best_right_entropy = best_right_hand_pose_record.current_entropy();
+            let duration = start_time.elapsed();
+            eprintln!("更新完成，耗时: {:?}", duration);
 
-            progress_callback(&format!("最小消耗熵为：{}\n", best_right_entropy));
+            match result {
+                Ok(_) => {
+                    // 获取最优解
+                    let best_right_hand_pose_record = right_hand_record_pool.get_best_recorder();
+                    let best_right_entropy = best_right_hand_pose_record.current_entropy();
+                    eprintln!("最小消耗熵为：{}", best_right_entropy);
+                }
+                Err(e) => {
+                    eprintln!("处理过程中出现错误: {}", e);
+                }
+            }
 
-            best_right_hand_pose_record.save(
-                &state.right_hand_recorder_file,
-                &state.tempo_changes,
-                state.ticks_per_beat,
-                state.fps,
-            )?;
+            duration
         })
     });
-
-    // 清理测试文件
-    if Path::new(left_hand_recorder_file).exists() {
-        let _ = fs::remove_file(left_hand_recorder_file);
-    }
 }
 
 criterion_group!(benches, benchmark_update_right_hand_recorder_pool);

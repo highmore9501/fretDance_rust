@@ -25,5 +25,5 @@ panic = "unwind"
 
 [[bench]]
 name = "right_hand_benchmark"
-path = "benches/right_hand_benchmark.rs"
+path = "benchs/right_hand_pool_benchmark.rs"
 harness = false
