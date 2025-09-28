@@ -273,7 +273,7 @@ impl MidiProcessor {
             std::collections::HashMap::new();
 
         // 统计所有note_on消息
-        for (i, track) in smf.tracks.iter().enumerate() {
+        for track in &smf.tracks {
             for event in track {
                 if let TrackEventKind::Midi { channel, message } = event.kind {
                     if let midly::MidiMessage::NoteOn { .. } = message {

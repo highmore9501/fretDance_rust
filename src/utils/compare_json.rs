@@ -1,8 +1,6 @@
 use serde_json::Value;
-use std::fs;
 use std::fs::File;
 use std::io::BufReader;
-use std::path::Path;
 
 /// 比较两个JSON文件的结构
 ///
@@ -153,99 +151,6 @@ fn print_value_structure(value: &Value, indent: usize) {
 
         Value::Null => {
             println!("{}Null", indent_str);
-        }
-    }
-}
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_compare_json_structure() {
-        // 创建测试用的JSON数据
-        let json1_str = r#"{"name": "test", "age": 30, "tags": ["rust", "json"]}"#;
-        let json2_str = r#"{"name": "example", "age": 25, "tags": ["python", "yaml"]}"#;
-        let json3_str = r#"{"name": "test", "age": 30}"#;
-
-        let json1: Value = serde_json::from_str(json1_str).unwrap();
-        let json2: Value = serde_json::from_str(json2_str).unwrap();
-        let json3: Value = serde_json::from_str(json3_str).unwrap();
-
-        // 测试相同结构
-        let same_structure1 = compare_values_structure(&json1, &json2);
-        assert!(same_structure1);
-
-        // 测试不同结构并打印结构
-        let same_structure2 = compare_values_structure(&json1, &json3);
-        assert!(!same_structure2);
-
-        // 手动调用打印函数查看结构
-        println!("JSON1结构:");
-        print_value_structure(&json1, 2);
-
-        println!("JSON3结构:");
-        print_value_structure(&json3, 2);
-    }
-
-    #[test]
-    fn test_controller_info_structures() {
-        let controller_info_path = "asset/controller_infos";
-        let reference_files = ["神里绫华-花时来信.json", "Mavuika_E.json"];
-
-        // 检查目录是否存在
-        if !Path::new(controller_info_path).exists() {
-            println!("目录 {} 不存在", controller_info_path);
-            return;
-        }
-
-        // 遍历目录中的所有JSON文件
-        if let Ok(entries) = fs::read_dir(controller_info_path) {
-            let json_files: Vec<_> = entries
-                .filter_map(|entry| {
-                    if let Ok(entry) = entry {
-                        let path = entry.path();
-                        if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                            if let Some(file_name) = path.file_name() {
-                                return Some(file_name.to_string_lossy().to_string());
-                            }
-                        }
-                    }
-                    None
-                })
-                .collect();
-
-            println!("找到 {} 个JSON文件进行结构对比测试", json_files.len());
-
-            // 对每个参考文件进行比较
-            for reference_file in &reference_files {
-                let reference_path = format!("{}/{}", controller_info_path, reference_file);
-
-                if !Path::new(&reference_path).exists() {
-                    println!("参考文件 {} 不存在，跳过", reference_path);
-                    continue;
-                }
-
-                println!("\n=== 与参考文件 {} 进行结构对比 ===", reference_file);
-
-                for json_file in &json_files {
-                    let file_path = format!("{}/{}", controller_info_path, json_file);
-
-                    match compare_json_structure(&reference_path, &file_path) {
-                        Ok(same_structure) => {
-                            if same_structure {
-                                println!("✓ {} 与 {} 结构相同", json_file, reference_file);
-                            } else {
-                                println!("✗ {} 与 {} 结构不同", json_file, reference_file);
-                            }
-                        }
-                        Err(e) => {
-                            println!("✗ 比较 {} 与 {} 时出错: {}", json_file, reference_file, e);
-                        }
-                    }
-                }
-            }
-        } else {
-            println!("无法读取目录 {}", controller_info_path);
         }
     }
 }

@@ -15,9 +15,15 @@ eframe = { version = "0.28", features = ["default"] }
 egui_extras = { version = "0.28", features = ["all_loaders", "image"] }
 image = { version = "0.24", features = ["png", "gif"] }
 rfd = "0.15"
+criterion = "0.5"
 
 [profile.dev]
 panic = "unwind"
 
 [profile.release]
 panic = "unwind"
+
+[[bench]]
+name = "right_hand_benchmark"
+path = "benches/right_hand_benchmark.rs"
+harness = false

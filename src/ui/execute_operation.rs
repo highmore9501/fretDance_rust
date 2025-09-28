@@ -1,6 +1,5 @@
-use crate::fret_dancer::{FretDancer, FretDancerState};
-use crate::hand::right_hand;
-use crate::ui::app::{EditAvatarMode, FretDanceApp, InstrumentType, Tab};
+use crate::fret_dancer::FretDancer;
+use crate::ui::app::FretDanceApp;
 use eframe::egui;
 use std::sync::mpsc;
 use std::thread;
@@ -8,7 +7,7 @@ use std::thread;
 pub fn show_execute_operation(app: &mut FretDanceApp, ui: &mut egui::Ui) {
     egui::ScrollArea::vertical().show(ui, |ui| {
         ui.horizontal(|ui| {
-            // 左半部分：显示所有设置参数
+            // 左半部分：显示所有设置参数和操作按钮
             ui.vertical(|ui| {
                 ui.set_width(ui.available_width() * 0.5);
 
@@ -92,29 +91,15 @@ pub fn show_execute_operation(app: &mut FretDanceApp, ui: &mut egui::Ui) {
                         ui.label("通道号:");
                         ui.monospace(app.channel_number.to_string());
                     });
-
-                    // 显示当前state状态
-                    ui.separator();
-                    ui.horizontal(|ui| {
-                        ui.label("State状态:");
-                        ui.monospace(if app.fret_dancer_state.is_some() {
-                            "已初始化"
-                        } else {
-                            "未初始化"
-                        });
-                    });
                 });
-            });
 
-            // 右半部分：操作按钮
-            ui.vertical(|ui| {
-                ui.set_width(ui.available_width());
+                ui.add_space(10.0);
 
                 ui.group(|ui| {
                     ui.heading("操作");
                     ui.separator();
 
-                    if ui.button("初始化").clicked() {
+                    if ui.button("1.初始化").clicked() {
                         let (tx, rx) = mpsc::channel();
 
                         match FretDancer::initialize(app, tx.clone()) {
@@ -131,7 +116,7 @@ pub fn show_execute_operation(app: &mut FretDanceApp, ui: &mut egui::Ui) {
                         ui.ctx().request_repaint();
                     }
 
-                    if ui.button("生成左手动作").clicked() {
+                    if ui.button("2.生成左手动作").clicked() {
                         let (tx, rx) = mpsc::channel();
 
                         // 如果state未初始化，则初始化
@@ -158,7 +143,7 @@ pub fn show_execute_operation(app: &mut FretDanceApp, ui: &mut egui::Ui) {
                         ui.ctx().request_repaint();
                     }
 
-                    if ui.button("生成左手动画数据").clicked() {
+                    if ui.button("3.生成左手动画数据").clicked() {
                         let (tx, rx) = mpsc::channel();
 
                         // 如果state未初始化，则初始化
@@ -190,7 +175,7 @@ pub fn show_execute_operation(app: &mut FretDanceApp, ui: &mut egui::Ui) {
                         ui.ctx().request_repaint();
                     }
 
-                    if ui.button("生成右手动作和动画数据").clicked() {
+                    if ui.button("4.生成右手动作和动画数据").clicked() {
                         let (tx, rx) = mpsc::channel();
 
                         // 如果state未初始化，则初始化
@@ -231,7 +216,7 @@ pub fn show_execute_operation(app: &mut FretDanceApp, ui: &mut egui::Ui) {
                         ui.ctx().request_repaint();
                     }
 
-                    if ui.button("生成弦振动数据").clicked() {
+                    if ui.button("5.生成弦振动数据").clicked() {
                         let (tx, rx) = mpsc::channel();
 
                         // 如果state未初始化，则初始化
@@ -273,19 +258,6 @@ pub fn show_execute_operation(app: &mut FretDanceApp, ui: &mut egui::Ui) {
                     if ui.button("一键生成所有数据").clicked() {
                         let (tx, rx) = mpsc::channel();
 
-                        // 如果state未初始化，则初始化
-                        if app.fret_dancer_state.is_none() {
-                            match FretDancer::initialize(app, tx.clone()) {
-                                Ok(state) => {
-                                    app.fret_dancer_state = Some(state);
-                                }
-                                Err(e) => {
-                                    app.append_console_output(&format!("初始化失败: {}", e));
-                                    return;
-                                }
-                            }
-                        }
-
                         let mut app_clone = app.clone();
 
                         thread::spawn(move || {
@@ -295,12 +267,21 @@ pub fn show_execute_operation(app: &mut FretDanceApp, ui: &mut egui::Ui) {
                         app.output_receiver = Some(rx);
                         ui.ctx().request_repaint();
                     }
+                });
+            });
 
-                    if ui.button("重置State").clicked() {
-                        app.fret_dancer_state = None;
-                        app.console_output = format!("{}\nState已重置\n", app.console_output);
-                        ui.ctx().request_repaint();
-                    }
+            // 右半部分：控制台输出
+            ui.vertical(|ui| {
+                ui.set_width(ui.available_width());
+
+                ui.group(|ui| {
+                    ui.heading("控制台输出");
+                    ui.separator();
+                    egui::ScrollArea::vertical()
+                        .auto_shrink(false)
+                        .show(ui, |ui| {
+                            ui.monospace(&app.console_output);
+                        });
                 });
             });
         });
@@ -318,17 +299,6 @@ pub fn show_execute_operation(app: &mut FretDanceApp, ui: &mut egui::Ui) {
                 ui.ctx().request_repaint();
             }
         }
-
-        ui.group(|ui| {
-            ui.heading("控制台输出");
-            ui.separator();
-            egui::ScrollArea::vertical()
-                .max_height(400.0)
-                .auto_shrink(false)
-                .show(ui, |ui| {
-                    ui.monospace(&app.console_output);
-                });
-        });
     });
 }
 

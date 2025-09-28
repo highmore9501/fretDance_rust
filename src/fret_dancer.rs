@@ -12,7 +12,7 @@ use crate::midi::midi_to_note::{MessageInfo, MidiProcessor, NoteInfo};
 use crate::recorder::left_hand_recorder::LeftHandRecorder;
 use crate::recorder::recorder_pool::{HandPoseRecordPool, HandRecorder};
 use crate::recorder::right_hand_recorder::RightHandRecorder;
-use crate::ui::app::{self, AvatarInfo, FretDanceApp};
+use crate::ui::app::{AvatarInfo, FretDanceApp};
 
 pub struct FretDancer;
 
@@ -313,12 +313,13 @@ impl FretDancer {
 
             progress_callback("完成右手数据生成");
         } else {
+            let is_playing_bass = state.avatar_info.instrument == "bass";
             let init_right_hand = RightHand::new(
                 vec![],
                 vec![state.max_string_index as i32, 2, 1, 0],
                 vec![],
                 false,
-                false,
+                is_playing_bass,
             );
 
             let mut init_right_hand_recorder = RightHandRecorder::new();
@@ -330,10 +331,13 @@ impl FretDancer {
                 Some(0),
             );
 
+            let is_play_bass = state.avatar_info.instrument == "bass";
+
             right_hand_record_pool.update_right_hand_recorder_pool(
                 &state.left_hand_recorder_file,
                 state.max_string_index,
                 &progress_callback,
+                is_play_bass,
             )?;
 
             // 获取最优解

@@ -39,6 +39,21 @@ impl RightHandRecorder {
         }
     }
 
+    /// 从现有数据创建新的右手记录器
+    pub fn with_data(
+        hand_pose_list: Vec<RightHand>,
+        current_entropy: f64,
+        entropies: Vec<f64>,
+        real_ticks: Vec<f64>,
+    ) -> Self {
+        RightHandRecorder {
+            hand_pose_list,
+            current_entropy,
+            entropies,
+            real_ticks,
+        }
+    }
+
     /// 添加手部姿态记录
     pub fn add_hand_pose(&mut self, hand_pose: RightHand, entropy: f64, real_tick: f64) {
         self.hand_pose_list.push(hand_pose);

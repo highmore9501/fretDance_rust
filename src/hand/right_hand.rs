@@ -35,12 +35,18 @@ impl RightHand {
         &self,
         used_fingers: Option<Vec<String>>,
         right_finger_positions: Option<Vec<i32>>,
+        allow_double_p: bool,
     ) -> bool {
-        let positions =
-            right_finger_positions.unwrap_or_else(|| self.right_finger_positions.clone());
-        let fingers = used_fingers.unwrap_or_else(|| self.used_fingers.clone());
+        let positions = match right_finger_positions {
+            Some(pos) => pos,
+            None => self.right_finger_positions.clone(),
+        };
+        let fingers = match used_fingers {
+            Some(f) => f,
+            None => self.used_fingers.clone(),
+        };
 
-        self.validate_right_hand_by_finger_positions(&fingers, &positions, false)
+        self.validate_right_hand_by_finger_positions(&fingers, &positions, allow_double_p)
     }
 
     pub fn calculate_diff(&self, other_right_hand: &RightHand) -> f64 {
@@ -101,35 +107,39 @@ impl RightHand {
         &self,
         used_fingers: &Vec<String>,
         right_finger_positions: &Vec<i32>,
-        repeated_fingers_checked: bool,
+        allow_double_p: bool,
     ) -> bool {
         for i in 0..right_finger_positions.len().saturating_sub(1) {
-            // 检测手指的位置是否从左到右递减，如果手指分布不符合科学，判断为错误;bass因为要考虑到会有im指交替拨低音弦的情况，需要另外考虑
-            if right_finger_positions[i] < right_finger_positions[i] && !self.is_playing_bass {
-                return false;
-            }
-            if right_finger_positions[i] < right_finger_positions[i] + 1 {
+            // 检测手指的位置是否从左到右递减，如果手指分布不符合科学，判断为错误;
+
+            if right_finger_positions[i] < right_finger_positions[i + 1] {
+                println!("Invalid right hand: finger positions are not in descending order.");
                 return false;
             }
         }
 
-        // 如果没有p指，而且其它手指已经预检测掉了重复和可能性，那么就直接返回True
-        if !used_fingers.contains(&"p".to_string()) && repeated_fingers_checked {
-            return true;
+        // 如果p指数量大于1但是不允许重复使用，那么就直接返回False
+        // 如果手指数量大于4并且不允许重复使用，那么就直接返回False
+        let p_amount = used_fingers.iter().filter(|f| **f == "p").count();
+        if (p_amount > 1 && !allow_double_p)
+            || (right_finger_positions.len() > 4 && !allow_double_p)
+        {
+            println!("Invalid right hand: too many fingers.");
+            return false;
         }
 
-        let mut used_string = Vec::new();
+        let mut used_string = std::collections::HashSet::new();
         let mut used_p_strings = Vec::new();
 
         for finger in used_fingers {
             let current_string = right_finger_positions[RightFingers::get_finger_index(finger)];
             if finger == "p" {
                 used_p_strings.push(current_string);
-            } else if !repeated_fingers_checked {
-                // 如果没有预检测过其它手指是否重复触弦，通过下面的方式来检测
-                if !used_string.contains(&current_string) {
-                    used_string.push(current_string);
-                } else {
+            } else {
+                // 使用 HashSet 的 insert 方法，如果值已存在会返回 false
+                if !used_string.insert(current_string) {
+                    // 运行到这里说明有两个手指重复拨同一弦
+                    println!("Invalid right hand: duplicate finger.");
                     return false;
                 }
             }
@@ -160,7 +170,244 @@ pub struct FingerStringPair {
     pub string: i32,
 }
 
-// 下面这些内容应该写到right_hand_recorder里面去
+// 新的高效算法实现
+pub fn generate_finger_placements(
+    touched_strings: Vec<i32>,
+    all_fingers: Vec<String>,
+    all_strings: Vec<i32>,
+    allow_double_p: bool,
+) -> Vec<Vec<FingerStringPair>> {
+    let mut results = Vec::new();
+
+    // 当触弦数超过4根时，使用琶音方式处理
+    if touched_strings.len() > 4 {
+        let placement = vec![
+            FingerStringPair {
+                finger: "p".to_string(),
+                string: 5,
+            },
+            FingerStringPair {
+                finger: "i".to_string(),
+                string: 4,
+            },
+            FingerStringPair {
+                finger: "m".to_string(),
+                string: 3,
+            },
+            FingerStringPair {
+                finger: "a".to_string(),
+                string: 2,
+            },
+        ];
+        results.push(placement);
+        return results;
+    }
+
+    // 对触弦按从高到低排序（数值从小到大）
+    let mut sorted_touched_strings = touched_strings.clone();
+    sorted_touched_strings.sort_by(|a, b| b.cmp(a));
+
+    // 生成所有可能的手指分配方案
+    let finger_assignments =
+        generate_finger_assignments(&all_fingers, &sorted_touched_strings, allow_double_p);
+
+    // 为每个手指分配方案生成合理的弦分配
+    for assignment in finger_assignments {
+        let placements =
+            generate_string_placements(&assignment, &sorted_touched_strings, &all_strings);
+        results.extend(placements);
+    }
+
+    results
+}
+
+fn generate_finger_assignments(
+    all_fingers: &Vec<String>,
+    touched_strings: &Vec<i32>,
+    allow_double_p: bool,
+) -> Vec<Vec<String>> {
+    let mut results = Vec::new();
+    let n_strings = touched_strings.len();
+
+    // 生成所有可能的手指选择组合
+    let finger_indices: Vec<usize> = (0..all_fingers.len()).collect();
+    let combinations = generate_combinations(&finger_indices, n_strings);
+
+    for combination in combinations {
+        let mut assignment = Vec::new();
+        for &idx in &combination {
+            assignment.push(all_fingers[idx].clone());
+        }
+
+        // 验证分配的有效性
+        let p_count = assignment.iter().filter(|&f| f == "p").count();
+        if p_count > 1 && !allow_double_p {
+            continue;
+        }
+
+        results.push(assignment);
+    }
+
+    results
+}
+
+fn generate_combinations(indices: &Vec<usize>, k: usize) -> Vec<Vec<usize>> {
+    if k == 0 {
+        return vec![vec![]];
+    }
+
+    if indices.len() < k {
+        return vec![];
+    }
+
+    let mut results = Vec::new();
+
+    // 包含第一个元素的情况
+    let first = indices[0];
+    let rest = &indices[1..];
+
+    let sub_combinations = generate_combinations(&rest.to_vec(), k - 1);
+    for mut combo in sub_combinations {
+        let mut new_combo = vec![first];
+        new_combo.append(&mut combo);
+        results.push(new_combo);
+    }
+
+    // 不包含第一个元素的情况
+    if rest.len() >= k {
+        let sub_combinations = generate_combinations(&rest.to_vec(), k);
+        results.extend(sub_combinations);
+    }
+
+    results
+}
+
+fn generate_string_placements(
+    fingers: &Vec<String>,
+    touched_strings: &Vec<i32>,
+    all_strings: &Vec<i32>,
+) -> Vec<Vec<FingerStringPair>> {
+    let mut results = Vec::new();
+
+    // 为每个手指分配对应的弦
+    let mut placement = Vec::new();
+    for (i, finger) in fingers.iter().enumerate() {
+        if i < touched_strings.len() {
+            placement.push(FingerStringPair {
+                finger: finger.clone(),
+                string: touched_strings[i],
+            });
+        }
+    }
+
+    // 确定未使用的手指
+    // 统计已使用的手指
+    let mut used_finger_counts = std::collections::HashMap::new();
+    for finger in fingers {
+        *used_finger_counts.entry(finger.as_str()).or_insert(0) += 1;
+    }
+
+    // 标准手指集合
+    let standard_fingers = vec!["p", "i", "m", "a"];
+    let mut unused_fingers = Vec::new();
+
+    // 计算每个标准手指应该有多少个
+    for &finger in &standard_fingers {
+        let needed = 1; // 每个标准手指至少需要1个
+        let used = *used_finger_counts.get(finger).unwrap_or(&0);
+        // 添加缺少的手指
+        for _ in used..needed {
+            unused_fingers.push(finger.to_string());
+        }
+    }
+
+    // 为未使用的手指选择合适的弦（避免使用已触弦的弦）
+    let available_strings: Vec<i32> = all_strings
+        .iter()
+        .filter(|&&s| !touched_strings.contains(&s))
+        .cloned()
+        .collect();
+
+    // 使用rest_finger_string_map_generator为未使用的手指生成所有可能的位置
+    if !unused_fingers.is_empty() {
+        // 构造只包含可用弦的all_strings副本
+
+        let sub_results =
+            rest_finger_string_map_generator(unused_fingers, available_strings, placement.clone());
+
+        for mut result in sub_results {
+            let mut combined = placement.clone();
+            combined.append(&mut result);
+
+            if validate_finger_placement(&combined) {
+                results.push(combined);
+            }
+        }
+    } else {
+        // 没有未使用的手指
+        if validate_finger_placement(&placement) {
+            results.push(placement);
+        }
+    }
+
+    results
+}
+fn validate_finger_placement(placement: &Vec<FingerStringPair>) -> bool {
+    // 检查手指顺序是否合理（从p到a，弦位置应递减）
+    let finger_order = HashMap::from([
+        ("p".to_string(), 0),
+        ("i".to_string(), 1),
+        ("m".to_string(), 2),
+        ("a".to_string(), 3),
+    ]);
+
+    let mut sorted_placement = placement.clone();
+    sorted_placement.sort_by_key(|p| finger_order.get(&p.finger).unwrap_or(&0));
+
+    // 分组相同手指
+    let mut finger_groups: HashMap<String, Vec<&FingerStringPair>> = HashMap::new();
+    for item in &sorted_placement {
+        finger_groups
+            .entry(item.finger.clone())
+            .or_insert_with(Vec::new)
+            .push(item);
+    }
+
+    for (_finger, items) in &finger_groups {
+        // 对于相同手指，检查它们是否在相邻的弦上
+        if items.len() > 1 {
+            let mut strings: Vec<i32> = items.iter().map(|item| item.string).collect();
+            strings.sort();
+
+            // 检查是否是连续的弦
+            for i in 0..strings.len() - 1 {
+                if strings[i + 1] - strings[i] != 1 {
+                    return false;
+                }
+            }
+        }
+    }
+
+    // 检查不同手指间的顺序
+    let mut prev_max_string = std::i32::MAX;
+    let mut current_finger_type = String::new();
+
+    for item in &sorted_placement {
+        if item.finger != current_finger_type {
+            // 新的手指类型
+            current_finger_type = item.finger.clone();
+            if item.string > prev_max_string {
+                return false;
+            }
+            prev_max_string = item.string;
+        } else {
+            // 相同手指类型，更新最大弦号
+            prev_max_string = prev_max_string.max(item.string);
+        }
+    }
+
+    true
+}
 pub fn finger_string_map_generator(
     all_fingers: Vec<String>,
     touched_strings: Vec<i32>,
@@ -180,7 +427,8 @@ pub fn finger_string_map_generator(
         return results;
     }
 
-    for current_finger in &all_fingers {
+    // 使用引用避免重复克隆
+    for (finger_idx, current_finger) in all_fingers.iter().enumerate() {
         for &touched_string in &touched_strings {
             let mut current_pairing_is_legal = true;
             let current_finger_index = RightFingers::get_finger_index(current_finger);
@@ -198,12 +446,14 @@ pub fn finger_string_map_generator(
                         && (prev_string - touched_string).abs() > 1)
                 {
                     current_pairing_is_legal = false;
+                    break; // 提前退出循环
                 }
             }
 
             if current_pairing_is_legal {
+                // 创建新的集合，避免多次克隆
                 let mut next_all_fingers = all_fingers.clone();
-                next_all_fingers.retain(|f| f != current_finger);
+                next_all_fingers.remove(finger_idx);
 
                 let mut next_touched_strings = touched_strings.clone();
                 next_touched_strings.retain(|&s| s != touched_string);
@@ -227,8 +477,11 @@ pub fn finger_string_map_generator(
                     next_finger_string_map,
                 );
 
+                // 使用容量预分配减少内存重新分配
+                results.reserve(sub_results.len());
                 for mut result in sub_results {
-                    let mut combined = vec![current_pairing.clone()];
+                    let mut combined = Vec::with_capacity(result.len() + 1);
+                    combined.push(current_pairing.clone());
                     combined.append(&mut result);
                     results.push(combined);
                 }
@@ -246,33 +499,39 @@ pub fn rest_finger_string_map_generator(
 ) -> Vec<Vec<FingerStringPair>> {
     let mut results = Vec::new();
 
-    if unused_fingers.is_empty() {
-        results.push(Vec::new());
-        return results;
-    }
-
     // 这里每次配对以后，不再移除已经配对的弦，因为不演奏的手指可以放在任一根弦上
-    for current_finger in &unused_fingers {
+    // 但需要遵循手指自然分布规律
+    for (finger_idx, current_finger) in unused_fingers.iter().enumerate() {
         for &cur_string in &all_strings {
-            let mut current_pairing_is_legal = true;
             let current_finger_index = RightFingers::get_finger_index(current_finger);
 
             // 检测当前配对组合是否和之前生成的配对组合有冲突
+            let mut current_pairing_is_legal = true;
             for pairing in &prev_finger_string_map {
                 let prev_finger = &pairing.finger;
                 let prev_string = pairing.string;
                 let prev_index = RightFingers::get_finger_index(prev_finger);
+
+                // 遵循手指自然分布规律：
+                // 1. 手指索引大的（如a指）应该在弦数小的位置（高音弦）
+                // 2. 手指索引小的（如p指）应该在弦数大的位置（低音弦）
+                // 3. 相邻手指应该在相邻或相近的弦上
 
                 if (current_finger_index > prev_index && cur_string > prev_string + 1)
                     || (current_finger_index < prev_index && cur_string < prev_string - 1)
                 {
                     current_pairing_is_legal = false;
                 }
+
+                if !current_pairing_is_legal {
+                    break; // 提前退出循环
+                }
             }
 
             if current_pairing_is_legal {
+                // 避免多次克隆
                 let mut next_all_fingers = unused_fingers.clone();
-                next_all_fingers.retain(|f| f != current_finger);
+                next_all_fingers.remove(finger_idx);
 
                 let current_pairing = FingerStringPair {
                     finger: current_finger.clone(),
@@ -282,14 +541,21 @@ pub fn rest_finger_string_map_generator(
                 let mut updated_finger_string_map = prev_finger_string_map.clone();
                 updated_finger_string_map.push(current_pairing.clone());
 
-                let sub_results = rest_finger_string_map_generator(
-                    next_all_fingers,
-                    all_strings.clone(),
-                    updated_finger_string_map,
-                );
+                // 递归调用前检查
+                let sub_results = if next_all_fingers.is_empty() {
+                    // 如果没有更多手指需要处理，直接返回包含当前配对的结果
+                    vec![vec![]]
+                } else {
+                    rest_finger_string_map_generator(
+                        next_all_fingers,
+                        all_strings.clone(),
+                        updated_finger_string_map,
+                    )
+                };
 
                 for mut result in sub_results {
-                    let mut combined = vec![current_pairing.clone()];
+                    let mut combined = Vec::new();
+                    combined.push(current_pairing.clone());
                     combined.append(&mut result);
                     results.push(combined);
                 }
@@ -299,57 +565,51 @@ pub fn rest_finger_string_map_generator(
 
     results
 }
+// 定义一个结构体来替代 HashMap<String, Value>
+#[derive(Debug, Clone)]
+pub struct RightHandCombination {
+    pub used_fingers: Vec<String>,
+    pub right_finger_positions: Vec<i32>,
+}
 
 pub fn generate_possible_right_hands(
     touched_strings: Vec<i32>,
     all_fingers: Vec<String>,
     all_strings: Vec<i32>,
-) -> Vec<HashMap<String, Value>> {
+) -> Vec<RightHandCombination> {
     let mut possible_combinations = Vec::new();
 
+    // 简化处理：当触弦数超过4根时，使用琶音方式处理
     if touched_strings.len() > 4 {
-        let used_fingers: Vec<i32> = Vec::new();
+        let used_fingers: Vec<String> = Vec::new();
         let right_finger_positions = vec![5, 4, 3, 2];
-        let mut combination = HashMap::new();
-        combination.insert(
-            "usedFingers".to_string(),
-            serde_json::to_value(&used_fingers).unwrap(),
-        );
-        combination.insert(
-            "rightFingerPositions".to_string(),
-            serde_json::to_value(&right_finger_positions).unwrap(),
-        );
-        possible_combinations.push(combination);
-    } else {
-        let unused_fingers = all_fingers.clone();
-        let results = finger_string_map_generator(
-            all_fingers.clone(),
-            touched_strings.clone(),
-            unused_fingers,
-            all_strings,
-            Vec::new(),
-        );
 
-        for result in results {
-            // 输出的结果必须是每个手指都有对应的位置，否则说明配对不合法
-            if result.is_empty() || result.len() < all_fingers.len() {
-                continue;
-            }
+        possible_combinations.push(RightHandCombination {
+            used_fingers,
+            right_finger_positions,
+        });
+        return possible_combinations;
+    }
 
-            let right_finger_positions = sort_fingers(&result);
-            let used_fingers = get_used_fingers(&result, &touched_strings);
+    // 使用更高效的算法生成手指放置方案
+    let allow_double_p =
+        all_strings.len() > 3 && touched_strings.iter().filter(|&&s| s > 2).count() > 1;
 
-            let mut combination = HashMap::new();
-            combination.insert(
-                "usedFingers".to_string(),
-                serde_json::to_value(&used_fingers).unwrap(),
-            );
-            combination.insert(
-                "rightFingerPositions".to_string(),
-                serde_json::to_value(&right_finger_positions).unwrap(),
-            );
-            possible_combinations.push(combination);
-        }
+    let finger_placements = generate_finger_placements(
+        touched_strings.clone(),
+        all_fingers.clone(),
+        all_strings.clone(),
+        allow_double_p,
+    );
+
+    for placement in finger_placements {
+        let right_finger_positions = sort_fingers(&placement);
+        let used_fingers = get_used_fingers(&placement, &touched_strings);
+
+        possible_combinations.push(RightHandCombination {
+            used_fingers,
+            right_finger_positions,
+        });
     }
 
     possible_combinations
