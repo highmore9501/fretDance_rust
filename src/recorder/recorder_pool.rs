@@ -611,6 +611,7 @@ impl HandPoseRecordPool {
 
         let total_steps = data.len();
         let start_time = Instant::now();
+        let current_time = Instant::now();
         progress_callback(&format!("开始处理右手数据，共 {} 项", total_steps));
 
         for i in 0..total_steps {
@@ -619,7 +620,18 @@ impl HandPoseRecordPool {
 
             // 每处理10项报告一次进度
             if i % 10 == 0 || i == total_steps - 1 {
-                progress_callback(&format!("处理进度: {}/{}", i + 1, total_steps));
+                let elapsed = current_time.elapsed().as_secs_f64();
+                let speed = if elapsed > 0.0 {
+                    (i + 1) as f64 / elapsed
+                } else {
+                    0.0
+                };
+                progress_callback(&format!(
+                    "处理进度: {}/{} ({:.2} step/秒)",
+                    i + 1,
+                    total_steps,
+                    speed
+                ));
             }
         }
 
