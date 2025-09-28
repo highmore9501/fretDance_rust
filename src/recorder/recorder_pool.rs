@@ -439,33 +439,40 @@ impl HandPoseRecordPool {
         // 遍历手指信息
         for finger in left_hand {
             if let Some(finger_obj) = finger.as_object() {
+                // 先检查手指索引，如果为-1则直接跳过
                 let finger_index = finger_obj
                     .get("finger_index")
                     .and_then(|v| v.as_i64())
                     .unwrap_or(-1);
-                if let Some(finger_info) = finger_obj.get("finger_info").and_then(|v| v.as_object())
-                {
-                    let press_value = match finger_info.get("press").and_then(|v| v.as_str()) {
-                        Some(value) => value,
-                        None => {
-                            println!("Missing press value in finger info");
-                            continue;
-                        }
-                    };
-                    let string_index = finger_info
-                        .get("string_index")
-                        .and_then(|v| v.as_i64())
-                        .unwrap_or(0);
+                if finger_index == -1 {
+                    continue;
+                }
 
-                    let press = PressState::from_str(&press_value).to_i32();
-
-                    // 如果是无效手指索引或者按弦方法在0到5之间（不包括0和5）
-                    if finger_index == -1 || (press > 0 && press < 5) {
-                        touched_strings.push(string_index as i32);
-                        if string_index > 2 {
-                            lower_strings.push(string_index as i32);
-                        }
+                // 获取按弦类型
+                let press_value = match finger_obj.get("press").and_then(|v| v.as_str()) {
+                    Some(value) => value,
+                    None => {
+                        println!("Missing press value in finger info");
+                        continue;
                     }
+                };
+
+                let press = PressState::from_str(&press_value).to_i32();
+
+                // 检查按弦类型（在0到5之间，不包括0和5）
+                if press <= 0 || press >= 5 {
+                    continue;
+                }
+
+                // 只有当手指索引和按弦类型都符合条件时才处理弦索引
+                let string_index = finger_obj
+                    .get("string_index")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0);
+
+                touched_strings.push(string_index as i32);
+                if string_index > 2 {
+                    lower_strings.push(string_index as i32);
                 }
             }
         }
