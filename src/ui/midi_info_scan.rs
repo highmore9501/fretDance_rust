@@ -114,6 +114,7 @@ pub fn show_midi_info_scan(app: &mut FretDanceApp, ui: &mut egui::Ui) {
 
             egui::ScrollArea::vertical()
                 .max_height(400.0)
+                .auto_shrink([false; 2])
                 .show(ui, |ui| {
                     ui.monospace(&app.midi_info_result);
                 });

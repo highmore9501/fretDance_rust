@@ -1,4 +1,5 @@
 use crate::fret_dancer::{FretDancer, FretDancerState};
+use crate::hand::right_hand;
 use crate::ui::app::{EditAvatarMode, FretDanceApp, InstrumentType, Tab};
 use eframe::egui;
 use std::sync::mpsc;
@@ -114,160 +115,184 @@ pub fn show_execute_operation(app: &mut FretDanceApp, ui: &mut egui::Ui) {
                     ui.separator();
 
                     if ui.button("初始化").clicked() {
-                        match execute_initialization(app) {
-                            Ok(output) => {
-                                app.console_output = format!("初始化成功:\n{}\n", output);
+                        let (tx, rx) = mpsc::channel();
+
+                        match FretDancer::initialize(app, tx.clone()) {
+                            Ok(state) => {
+                                app.fret_dancer_state = Some(state);
                             }
                             Err(e) => {
-                                app.console_output = format!("初始化失败: {}\n", e);
+                                app.append_console_output(&format!("初始化失败: {}", e));
+                                return;
                             }
                         }
+
+                        app.output_receiver = Some(rx);
                         ui.ctx().request_repaint();
                     }
 
                     if ui.button("生成左手动作").clicked() {
-                        // 创建通道用于通信
-                        let (tx, rx) = mpsc::channel::<String>();
-
-                        // 克隆需要的数据
-                        let use_harm_notes = app.use_harm_notes;
+                        let (tx, rx) = mpsc::channel();
 
                         // 如果state未初始化，则初始化
                         if app.fret_dancer_state.is_none() {
-                            match initialize_state_if_needed(app) {
+                            match FretDancer::initialize(app, tx.clone()) {
                                 Ok(state) => {
                                     app.fret_dancer_state = Some(state);
                                 }
                                 Err(e) => {
                                     app.append_console_output(&format!("初始化失败: {}", e));
-                                    ui.ctx().request_repaint();
                                     return;
                                 }
                             }
                         }
 
-                        // 克隆state用于线程
-                        let state = app.fret_dancer_state.as_ref().unwrap().clone();
+                        let mut app_clone = app.clone();
 
-                        // 在后台线程中执行
                         thread::spawn(move || {
-                            match FretDancer::generate_left_hand_motion(
-                                &state,
-                                use_harm_notes,
-                                |message: &str| {
-                                    let _ = tx.send(message.to_string());
-                                },
-                            ) {
-                                Ok(_) => {
-                                    let _ = tx.send("左手动作生成完成".to_string());
-                                }
-                                Err(e) => {
-                                    let _ = tx.send(format!("生成失败: {}", e));
-                                }
-                            }
+                            let _ =
+                                FretDancer::generate_left_hand_motion(&mut app_clone, tx.clone());
                         });
 
-                        // 保存接收端用于后续处理
                         app.output_receiver = Some(rx);
+                        ui.ctx().request_repaint();
                     }
 
                     if ui.button("生成左手动画数据").clicked() {
-                        match execute_generate_left_hand_animation(app) {
-                            Ok(output) => {
-                                app.console_output = format!(
-                                    "{}\n生成左手动画数据成功:\n{}\n",
-                                    app.console_output, output
-                                );
-                            }
-                            Err(e) => {
-                                app.console_output = format!(
-                                    "{}\n生成左手动画数据失败: {}\n",
-                                    app.console_output, e
-                                );
+                        let (tx, rx) = mpsc::channel();
+
+                        // 如果state未初始化，则初始化
+                        if app.fret_dancer_state.is_none() {
+                            match FretDancer::initialize(app, tx.clone()) {
+                                Ok(state) => {
+                                    app.fret_dancer_state = Some(state);
+                                }
+                                Err(e) => {
+                                    app.append_console_output(&format!("初始化失败: {}", e));
+                                    return;
+                                }
                             }
                         }
+
+                        match FretDancer::generate_left_hand_animation(app) {
+                            Ok(file_path) => {
+                                app.append_console_output(&format!(
+                                    "生成左手动画成功: {}",
+                                    file_path
+                                ));
+                            }
+                            Err(e) => {
+                                app.append_console_output(&format!("生成左手动画失败: {}", e));
+                            }
+                        }
+
+                        app.output_receiver = Some(rx);
                         ui.ctx().request_repaint();
                     }
 
                     if ui.button("生成右手动作和动画数据").clicked() {
-                        // 创建通道用于通信
-                        let (tx, rx) = mpsc::channel::<String>();
+                        let (tx, rx) = mpsc::channel();
 
                         // 如果state未初始化，则初始化
                         if app.fret_dancer_state.is_none() {
-                            match initialize_state_if_needed(app) {
+                            match FretDancer::initialize(app, tx.clone()) {
                                 Ok(state) => {
                                     app.fret_dancer_state = Some(state);
                                 }
                                 Err(e) => {
                                     app.append_console_output(&format!("初始化失败: {}", e));
-                                    ui.ctx().request_repaint();
                                     return;
                                 }
                             }
                         }
 
-                        // 克隆state用于线程
-                        let state = app.fret_dancer_state.as_ref().unwrap().clone();
+                        let mut app_clone = app.clone();
 
-                        // 在后台线程中执行
                         thread::spawn(move || {
+                            // 在后台线程中执行
                             match FretDancer::generate_right_hand_motion_and_animation(
-                                &state,
-                                |message: &str| {
-                                    let _ = tx.send(message.to_string());
-                                },
+                                &mut app_clone,
+                                tx.clone(),
                             ) {
-                                Ok(animation_file) => {
-                                    let _ = tx.send(format!(
-                                        "右手动作和动画数据已保存至: {}",
-                                        animation_file
+                                Ok(file_path) => {
+                                    app_clone.append_console_output(&format!(
+                                        "生成右手动作和动画成功: {}",
+                                        file_path
                                     ));
-                                    let _ = tx.send("右手动作和动画生成完成".to_string());
                                 }
-                                Err(e) => {
-                                    let _ = tx.send(format!("生成失败: {}", e));
-                                }
+                                Err(e) => app_clone.append_console_output(&format!(
+                                    "生成右手动作和动画失败: {}",
+                                    e
+                                )),
                             }
                         });
 
-                        // 保存接收端用于后续处理
                         app.output_receiver = Some(rx);
+                        ui.ctx().request_repaint();
                     }
 
                     if ui.button("生成弦振动数据").clicked() {
-                        match execute_generate_string_vibration_data(app) {
-                            Ok(output) => {
-                                app.console_output = format!(
-                                    "{}\n生成弦振动数据成功:\n{}\n",
-                                    app.console_output, output
-                                );
-                            }
-                            Err(e) => {
-                                app.console_output =
-                                    format!("{}\n生成弦振动数据失败: {}\n", app.console_output, e);
+                        let (tx, rx) = mpsc::channel();
+
+                        // 如果state未初始化，则初始化
+                        if app.fret_dancer_state.is_none() {
+                            match FretDancer::initialize(app, tx.clone()) {
+                                Ok(state) => {
+                                    app.fret_dancer_state = Some(state);
+                                }
+                                Err(e) => {
+                                    app.append_console_output(&format!("初始化失败: {}", e));
+                                    return;
+                                }
                             }
                         }
+
+                        let mut app_clone = app.clone();
+
+                        thread::spawn(move || {
+                            match execute_generate_string_vibration_data(&mut app_clone, tx.clone())
+                            {
+                                Ok(file_path) => {
+                                    app_clone.append_console_output(&format!(
+                                        "生成弦振动数据成功: {}",
+                                        file_path
+                                    ));
+                                }
+                                Err(e) => app_clone
+                                    .append_console_output(&format!("生成弦振动数据失败: {}", e)),
+                            }
+                        });
+
+                        app.output_receiver = Some(rx);
+
                         ui.ctx().request_repaint();
                     }
 
                     ui.separator();
 
                     if ui.button("一键生成所有数据").clicked() {
-                        // 一键生成时重置state以确保使用最新参数
-                        app.fret_dancer_state = None;
-                        match execute_all_operations(app) {
-                            Ok(output) => {
-                                app.console_output =
-                                    format!("{}\n{}\n", app.console_output, output);
-                            }
-                            Err(e) => {
-                                app.console_output = format!(
-                                    "{}\n一键生成所有数据失败: {}\n",
-                                    app.console_output, e
-                                );
+                        let (tx, rx) = mpsc::channel();
+
+                        // 如果state未初始化，则初始化
+                        if app.fret_dancer_state.is_none() {
+                            match FretDancer::initialize(app, tx.clone()) {
+                                Ok(state) => {
+                                    app.fret_dancer_state = Some(state);
+                                }
+                                Err(e) => {
+                                    app.append_console_output(&format!("初始化失败: {}", e));
+                                    return;
+                                }
                             }
                         }
+
+                        let mut app_clone = app.clone();
+
+                        thread::spawn(move || {
+                            let _ = FretDancer::main(&mut app_clone, tx.clone());
+                        });
+
+                        app.output_receiver = Some(rx);
                         ui.ctx().request_repaint();
                     }
 
@@ -298,131 +323,29 @@ pub fn show_execute_operation(app: &mut FretDanceApp, ui: &mut egui::Ui) {
             ui.heading("控制台输出");
             ui.separator();
             egui::ScrollArea::vertical()
-                .max_height(200.0)
+                .max_height(400.0)
+                .auto_shrink(false)
                 .show(ui, |ui| {
                     ui.monospace(&app.console_output);
                 });
         });
     });
 }
-fn initialize_state_if_needed(
-    app: &mut FretDanceApp,
-) -> Result<FretDancerState, Box<dyn std::error::Error>> {
-    let state = FretDancer::initialize(app)?;
-    Ok(state)
-}
-fn execute_initialization(app: &mut FretDanceApp) -> Result<String, Box<dyn std::error::Error>> {
-    let state = initialize_state_if_needed(app)?;
-    let filename = state.filename.clone();
-    app.fret_dancer_state = Some(state);
-    Ok(format!("初始化完成，生成的文件名前缀: {}", filename))
-}
-fn execute_generate_left_hand_animation(
-    app: &mut FretDanceApp,
-) -> Result<String, Box<dyn std::error::Error>> {
-    // 如果state未初始化，则初始化
-    if app.fret_dancer_state.is_none() {
-        app.fret_dancer_state = Some(initialize_state_if_needed(app)?);
-    }
-
-    // 使用已有的state
-    let state = app.fret_dancer_state.as_ref().unwrap();
-    let animation_file = FretDancer::generate_left_hand_animation(state)?;
-
-    Ok(format!("左手动画数据已保存至: {}", animation_file))
-}
 
 fn execute_generate_string_vibration_data(
     app: &mut FretDanceApp,
+    tx: mpsc::Sender<String>,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    // 如果state未初始化，则初始化
-    if app.fret_dancer_state.is_none() {
-        app.fret_dancer_state = Some(initialize_state_if_needed(app)?);
-    }
-
-    let console_output = &mut app.console_output;
-
     // 使用已有的state
     let state = app.fret_dancer_state.as_ref().unwrap();
-    let string_file = FretDancer::generate_string_vibration_data(state, console_output)?;
+    let string_file = FretDancer::generate_string_vibration_data(state, tx.clone())?;
+
+    match FretDancer::export_final_report(state, tx.clone()) {
+        Ok(()) => {}
+        Err(e) => {
+            let _ = tx.send(format!("生成最终报告失败: {}", e));
+        }
+    };
 
     Ok(format!("弦振动数据已保存至: {}", string_file))
-}
-
-fn execute_all_operations(app: &mut FretDanceApp) -> Result<String, Box<dyn std::error::Error>> {
-    // 创建通道用于通信
-    let (tx, rx) = mpsc::channel::<String>();
-
-    // 克隆需要的数据
-    let midi_file_path = app.midi_file_path.clone();
-    let track_numbers_str = app.track_numbers_str.clone();
-    let channel_number = app.channel_number;
-    let fps = app.fps;
-    let guitar_string_notes = app.guitar_string_notes.clone();
-    let octave_down_checkbox = app.octave_down_checkbox;
-    let capo_number = app.capo_number;
-    let use_harm_notes = app.use_harm_notes;
-    let disable_barre = app.disable_barre;
-    let current_avatar_info = app.current_avatar_info.clone();
-
-    // 在后台线程中执行
-    thread::spawn(move || {
-        // 创建一个新的App实例用于后台任务
-        let mut background_app = FretDanceApp {
-            avatar: String::new(),
-            midi_file_path,
-            track_numbers_str,
-            selected_track: 1,
-            channel_number,
-            fps,
-            guitar_string_notes,
-            octave_down_checkbox,
-            capo_number,
-            use_harm_notes,
-            disable_barre,
-            tuning_presets: vec![],
-            avatar_options: vec![],
-            midi_options: vec![],
-            console_output: String::new(),
-            avatar_infos: vec![],
-            current_avatar_info,
-            show_delete_confirmation: false,
-            show_edit_avatar_dialog: false,
-            edit_avatar_name: String::new(),
-            edit_avatar_image: String::new(),
-            edit_avatar_selected_image_path: String::new(),
-            edit_avatar_json: String::new(),
-            edit_avatar_selected_json_path: String::new(),
-            edit_avatar_instrument: InstrumentType::FingerStyleGuitar,
-            edit_avatar_mode: EditAvatarMode::New,
-            dark_mode: true,
-            midi_info_result: String::new(),
-            scanning_midi: false,
-            current_tab: Tab::ExecuteOperation,
-            fret_dancer_state: None,
-            output_receiver: None,
-            is_processing: false,
-        };
-
-        match FretDancer::main(&mut background_app, |message: &str| {
-            let _ = tx.send(message.to_string());
-        }) {
-            Ok(_) => {
-                let output_lines: Vec<&str> = background_app.console_output.lines().collect();
-                for line in output_lines {
-                    let _ = tx.send(line.to_string());
-                }
-                let _ = tx.send("一键生成所有数据完成".to_string());
-            }
-            Err(e) => {
-                let _ = tx.send(format!("执行失败: {}", e));
-            }
-        }
-    });
-
-    // 保存接收端用于后续处理
-    app.output_receiver = Some(rx);
-
-    // 返回一个临时消息，实际结果将通过通道传递
-    Ok("开始执行一键生成所有数据...".to_string())
 }

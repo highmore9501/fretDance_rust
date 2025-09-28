@@ -27,13 +27,6 @@ impl FretDanceApp {
         }
     }
 
-    fn parse_track_numbers(&self) -> Vec<i32> {
-        self.track_numbers_str
-            .split(',')
-            .filter_map(|s| s.trim().parse().ok())
-            .collect()
-    }
-
     pub fn scan_midi_info(&mut self) {
         // 设置扫描状态
         self.scanning_midi = true;

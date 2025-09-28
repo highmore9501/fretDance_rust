@@ -264,6 +264,26 @@ impl MidiProcessor {
 
         let mut result = String::new();
 
+        // 用于统计每个channel的note_on事件数量
+        let mut note_count_by_channel: std::collections::HashMap<u8, u32> =
+            std::collections::HashMap::new();
+
+        // 存储每个(track, channel)组合最新的乐器
+        let mut channel_instruments: std::collections::HashMap<(usize, u8), &str> =
+            std::collections::HashMap::new();
+
+        // 统计所有note_on消息
+        for (i, track) in smf.tracks.iter().enumerate() {
+            for event in track {
+                if let TrackEventKind::Midi { channel, message } = event.kind {
+                    if let midly::MidiMessage::NoteOn { .. } = message {
+                        *note_count_by_channel.entry(channel.as_int()).or_insert(0) += 1;
+                    }
+                }
+            }
+        }
+
+        // 跟踪每个channel最后使用的乐器
         for (i, track) in smf.tracks.iter().enumerate() {
             // 从轨道事件中查找轨道名称
             let track_name = track
@@ -282,18 +302,39 @@ impl MidiProcessor {
             for event in track {
                 if let TrackEventKind::Midi { channel, message } = event.kind {
                     if let midly::MidiMessage::ProgramChange { program } = message {
-                        let channel_num = channel.as_int();
                         let instrument_idx = program.as_int() as usize;
-
                         if instrument_idx < self.midi_instruments.len() {
                             let instrument = self.midi_instruments[instrument_idx];
-                            result.push_str(&format!(
-                                "Track {}, Channel {}: {}\n",
-                                i, channel_num, instrument
-                            ));
+                            channel_instruments.insert((i, channel.as_int()), instrument);
                         }
                     }
                 }
+            }
+        }
+
+        // 创建一个按channel聚合的乐器信息
+        let mut channel_latest_instrument: std::collections::HashMap<u8, &str> =
+            std::collections::HashMap::new();
+        for ((_, channel), instrument) in &channel_instruments {
+            channel_latest_instrument.insert(*channel, instrument);
+        }
+
+        // 输出每个channel的信息
+        let mut channels: Vec<&u8> = note_count_by_channel.keys().collect();
+        channels.sort();
+
+        for channel in channels {
+            let note_count = note_count_by_channel[channel];
+            if let Some(instrument) = channel_latest_instrument.get(channel) {
+                result.push_str(&format!(
+                    "Channel {}: {} ({} notes)\n",
+                    channel, instrument, note_count
+                ));
+            } else {
+                result.push_str(&format!(
+                    "Channel {}: Unknown instrument ({} notes)\n",
+                    channel, note_count
+                ));
             }
         }
 
@@ -343,28 +384,52 @@ impl MidiProcessor {
                             });
 
                             match message {
-                                midly::MidiMessage::NoteOn { key, .. } => {
-                                    // 如果当前时间与之前记录的时间不同，说明是新的一组音符
-                                    if current_tick != real_tick && !note.is_empty() {
-                                        // 保存之前收集的音符
+                                midly::MidiMessage::NoteOn { key, vel } => {
+                                    // 只有当音符开启(velocity > 0)时才处理
+                                    if vel.as_int() > 0 {
+                                        // 如果当前时间与之前记录的时间不同，说明是新的一组音符
+                                        if current_tick != real_tick && !note.is_empty() {
+                                            // 保存之前收集的音符
+                                            note.sort();
+                                            notes_map.push(NoteInfo {
+                                                notes: note.clone(),
+                                                real_tick: current_tick,
+                                            });
+                                            note.clear(); // 重置音符列表
+                                        }
+
+                                        // 更新当前时间点
+                                        current_tick = real_tick;
+
+                                        // 添加新音符
+                                        let mut note_value = key.as_int() as i32;
+                                        if octave_down_checkbox {
+                                            note_value -= 12;
+                                        }
+                                        note_value -= capo_number;
+                                        note.push(note_value);
+                                    } else {
+                                        // velocity为0表示音符关闭，处理非note_on事件，如果当前有音符则保存
+                                        if !note.is_empty() {
+                                            note.sort();
+                                            notes_map.push(NoteInfo {
+                                                notes: note.clone(),
+                                                real_tick: current_tick,
+                                            });
+                                            note.clear();
+                                        }
+                                    }
+                                }
+                                midly::MidiMessage::NoteOff { .. } => {
+                                    // 处理note_off事件，如果当前有音符则保存
+                                    if !note.is_empty() {
                                         note.sort();
                                         notes_map.push(NoteInfo {
                                             notes: note.clone(),
                                             real_tick: current_tick,
                                         });
-                                        note.clear(); // 重置音符列表
+                                        note.clear();
                                     }
-
-                                    // 更新当前时间点
-                                    current_tick = real_tick;
-
-                                    // 添加新音符
-                                    let mut note_value = key.as_int() as i32;
-                                    if octave_down_checkbox {
-                                        note_value -= 12;
-                                    }
-                                    note_value -= capo_number;
-                                    note.push(note_value);
                                 }
                                 midly::MidiMessage::PitchBend { bend } => {
                                     pitch_wheel_map.push(PitchWheelInfo {
@@ -379,7 +444,7 @@ impl MidiProcessor {
                                     });
                                 }
                                 _ => {
-                                    // 处理非note_on事件，如果当前有音符则保存
+                                    // 处理其他MIDI事件，如果当前有音符则保存
                                     if !note.is_empty() {
                                         note.sort();
                                         notes_map.push(NoteInfo {
@@ -392,7 +457,28 @@ impl MidiProcessor {
                             }
                         }
                     }
-                    _ => {}
+                    TrackEventKind::Meta(_) => {
+                        // 处理元事件，如果当前有音符则保存
+                        if !note.is_empty() {
+                            note.sort();
+                            notes_map.push(NoteInfo {
+                                notes: note.clone(),
+                                real_tick: current_tick,
+                            });
+                            note.clear();
+                        }
+                    }
+                    _ => {
+                        // 处理其他事件，如果当前有音符则保存
+                        if !note.is_empty() {
+                            note.sort();
+                            notes_map.push(NoteInfo {
+                                notes: note.clone(),
+                                real_tick: current_tick,
+                            });
+                            note.clear();
+                        }
+                    }
                 }
             }
 

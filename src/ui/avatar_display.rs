@@ -285,7 +285,7 @@ fn prepare_edit_avatar(app: &mut FretDanceApp, mode: EditAvatarMode) {
                 app.edit_avatar_name = avatar_info.name.clone();
                 app.edit_avatar_image = avatar_info.image.clone();
                 app.edit_avatar_selected_image_path = String::new();
-                app.edit_avatar_json = String::new();
+                app.edit_avatar_json = avatar_info.file.clone();
                 app.edit_avatar_selected_json_path = String::new();
                 app.edit_avatar_instrument = InstrumentType::from_str(&avatar_info.instrument);
             }
@@ -346,13 +346,24 @@ fn show_placeholder_image(ui: &mut egui::Ui) {
 
 /// 验证选中的JSON文件是否符合要求
 fn validate_json_file(app: &FretDanceApp) -> Result<(), String> {
-    // 检查是否选择了JSON文件
-    if app.edit_avatar_json.is_empty() || app.edit_avatar_selected_json_path.is_empty() {
+    let json_file_path = if app.edit_avatar_json.is_empty()
+        && app.edit_avatar_selected_json_path.is_empty()
+    {
+        // 如果两个路径都为空，说明没有有效的json文件
         return Err("请选择一个JSON配置文件".to_string());
-    }
+    } else if !app.edit_avatar_json.is_empty() && !app.edit_avatar_selected_json_path.is_empty() {
+        // 如果两个都不为空，取app.edit_avatar_selected_json_path为json文件路径
+        &app.edit_avatar_selected_json_path
+    } else if !app.edit_avatar_json.is_empty() && app.edit_avatar_selected_json_path.is_empty() {
+        // 如果只有edit_avatar_json有信息，那么需要找的json文件路径是`asset/controller_infos/`下的同名json文件
+        &format!("asset/controller_infos/{}", app.edit_avatar_json)
+    } else {
+        // 如果只有`edit_avatar_selected_json_path`有信息，那么就直接使用它做为json文件路径
+        &app.edit_avatar_selected_json_path
+    };
 
     // 检查文件是否存在
-    if !std::path::Path::new(&app.edit_avatar_selected_json_path).exists() {
+    if !std::path::Path::new(json_file_path).exists() {
         return Err("选择的JSON文件不存在".to_string());
     }
 
@@ -373,19 +384,13 @@ fn validate_json_file(app: &FretDanceApp) -> Result<(), String> {
     match app.edit_avatar_instrument {
         InstrumentType::ElectricGuitar => {
             // 对于电吉他，检查是否与Mavuika_E.json结构相同
-            match compare_json_structure(
-                &app.edit_avatar_selected_json_path,
-                electric_guitar_reference,
-            ) {
+            match compare_json_structure(json_file_path, electric_guitar_reference) {
                 Ok(same_structure) => {
                     if same_structure {
                         Ok(())
                     } else {
                         // 检查是否与其他参考文件结构相同
-                        match compare_json_structure(
-                            &app.edit_avatar_selected_json_path,
-                            other_instruments_reference,
-                        ) {
+                        match compare_json_structure(json_file_path, other_instruments_reference) {
                             Ok(same) => {
                                 if same {
                                     Err("选择的JSON文件与电吉他参考文件结构不匹配，但与指弹吉他/贝斯参考文件结构匹配，请检查乐器类型选择是否正确".to_string())
@@ -402,19 +407,13 @@ fn validate_json_file(app: &FretDanceApp) -> Result<(), String> {
         }
         InstrumentType::FingerStyleGuitar | InstrumentType::Bass => {
             // 对于指弹吉他和贝斯，检查是否与神里绫华-花时来信.json结构相同
-            match compare_json_structure(
-                &app.edit_avatar_selected_json_path,
-                other_instruments_reference,
-            ) {
+            match compare_json_structure(json_file_path, other_instruments_reference) {
                 Ok(same_structure) => {
                     if same_structure {
                         Ok(())
                     } else {
                         // 检查是否与电吉他参考文件结构相同
-                        match compare_json_structure(
-                            &app.edit_avatar_selected_json_path,
-                            electric_guitar_reference,
-                        ) {
+                        match compare_json_structure(json_file_path, electric_guitar_reference) {
                             Ok(same) => {
                                 if same {
                                     Err("选择的JSON文件与指弹吉他/贝斯参考文件结构不匹配，但与电吉他参考文件结构匹配，请检查乐器类型选择是否正确".to_string())

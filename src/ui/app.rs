@@ -56,7 +56,6 @@ pub enum EditAvatarMode {
     New,
     Edit,
 }
-
 pub struct FretDanceApp {
     // 用户选择的参数
     pub avatar: String,
@@ -118,6 +117,46 @@ pub struct FretDanceApp {
     pub is_processing: bool,
 }
 
+impl Clone for FretDanceApp {
+    fn clone(&self) -> Self {
+        Self {
+            avatar: self.avatar.clone(),
+            midi_file_path: self.midi_file_path.clone(),
+            track_numbers_str: self.track_numbers_str.clone(),
+            selected_track: self.selected_track,
+            channel_number: self.channel_number,
+            fps: self.fps,
+            guitar_string_notes: self.guitar_string_notes.clone(),
+            octave_down_checkbox: self.octave_down_checkbox,
+            capo_number: self.capo_number,
+            use_harm_notes: self.use_harm_notes,
+            disable_barre: self.disable_barre,
+            tuning_presets: self.tuning_presets.clone(),
+            avatar_options: self.avatar_options.clone(),
+            midi_options: self.midi_options.clone(),
+            console_output: self.console_output.clone(),
+            avatar_infos: self.avatar_infos.clone(),
+            current_avatar_info: self.current_avatar_info.clone(),
+            show_delete_confirmation: self.show_delete_confirmation,
+            show_edit_avatar_dialog: self.show_edit_avatar_dialog,
+            edit_avatar_name: self.edit_avatar_name.clone(),
+            edit_avatar_image: self.edit_avatar_image.clone(),
+            edit_avatar_selected_image_path: self.edit_avatar_selected_image_path.clone(),
+            edit_avatar_json: self.edit_avatar_json.clone(),
+            edit_avatar_selected_json_path: self.edit_avatar_selected_json_path.clone(),
+            edit_avatar_instrument: self.edit_avatar_instrument.clone(),
+            edit_avatar_mode: self.edit_avatar_mode.clone(),
+            dark_mode: self.dark_mode,
+            midi_info_result: self.midi_info_result.clone(),
+            scanning_midi: self.scanning_midi,
+            current_tab: self.current_tab,
+            fret_dancer_state: self.fret_dancer_state.clone(),
+            // 不能克隆的字段设置为默认值
+            output_receiver: None,
+            is_processing: false,
+        }
+    }
+}
 impl FretDanceApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         // 加载系统中文字体

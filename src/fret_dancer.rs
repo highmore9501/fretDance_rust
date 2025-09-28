@@ -1,5 +1,6 @@
 use serde_json;
 use std::fs::File;
+use std::sync::mpsc;
 
 use crate::animate::animator::Animator;
 use crate::guitar::guitar_instance::Guitar;
@@ -11,7 +12,7 @@ use crate::midi::midi_to_note::{MessageInfo, MidiProcessor, NoteInfo};
 use crate::recorder::left_hand_recorder::LeftHandRecorder;
 use crate::recorder::recorder_pool::{HandPoseRecordPool, HandRecorder};
 use crate::recorder::right_hand_recorder::RightHandRecorder;
-use crate::ui::app::{AvatarInfo, FretDanceApp};
+use crate::ui::app::{self, AvatarInfo, FretDanceApp};
 
 pub struct FretDancer;
 
@@ -41,7 +42,13 @@ pub struct FretDancerState {
 impl FretDancer {
     pub fn initialize(
         app: &mut FretDanceApp, // 保留这个参数用于输出信息
+        tx: mpsc::Sender<String>,
     ) -> Result<FretDancerState, Box<dyn std::error::Error>> {
+        // 创建通道用于通信
+        let console_callback = move |message: &str| {
+            let _ = tx.send(message.to_string());
+        };
+
         let track_numbers: Result<Vec<i32>, _> = app
             .track_numbers_str
             .split(',')
@@ -126,18 +133,17 @@ impl FretDancer {
         let messages_file_handle = File::create(&messages_file)?;
         serde_json::to_writer_pretty(messages_file_handle, &messages)?;
 
-        let console_output = &mut app.console_output;
         // 打印速度变化信息
-        console_output.push_str("全曲的速度变化是:\n");
+        console_callback("全曲的速度变化是:");
         // 正确的访问方式
         for tempo_change in tempo_changes.iter() {
-            console_output.push_str(&format!(
-                "在{}轨，tick为{}时，速度变为{}\n",
+            console_callback(&format!(
+                "在{}轨，tick为{}时，速度变为{}",
                 tempo_change.track, tempo_change.time, tempo_change.tempo
             ));
         }
 
-        console_output.push_str(&format!("\n全曲的每拍tick数是:{}\n\n", ticks_per_beat));
+        console_callback(&format!("全曲的每拍tick数是:{}", ticks_per_beat));
 
         // 计算总时间
         let total_tick = notes_map.last().map_or(0.0, |note| note.real_tick);
@@ -149,8 +155,8 @@ impl FretDancer {
         );
         let total_time = total_frame as f64 / app.fps as f64;
 
-        console_output.push_str(&format!(
-            "如果以{}的fps做成动画，一共是{} ticks, 合计{}帧, 约{}秒\n",
+        console_callback(&format!(
+            "如果以{}的fps做成动画，一共是{} ticks, 合计{}帧, 约{}秒",
             app.fps, total_tick, total_frame, total_time
         ));
 
@@ -179,20 +185,21 @@ impl FretDancer {
             right_hand_animation_file,
             guitar_string_recorder_file,
         };
-
         Ok(state)
     }
 
-    pub fn generate_left_hand_motion<F>(
-        state: &FretDancerState,
-        use_harm_notes: bool,
-        console_callback: F,
-    ) -> Result<(), Box<dyn std::error::Error>>
-    where
-        F: Fn(&str),
-    {
+    pub fn generate_left_hand_motion(
+        app: &mut FretDanceApp,
+        tx: mpsc::Sender<String>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        // 克隆state用于线程
+        let state = app.fret_dancer_state.as_ref().unwrap().clone();
+        // 创建通道用于通信
+        let console_callback = move |message: &str| {
+            let _ = tx.send(message.to_string());
+        };
         // 更新吉他配置以使用泛音
-        let guitar = Guitar::with_defaults(state.guitar.guitar_strings.clone(), use_harm_notes);
+        let guitar = Guitar::with_defaults(state.guitar.guitar_strings.clone(), app.use_harm_notes);
 
         // 设定各手指状态
         let left_fingers = vec![
@@ -253,8 +260,9 @@ impl FretDancer {
         Ok(())
     }
     pub fn generate_left_hand_animation(
-        state: &FretDancerState,
+        app: &mut FretDanceApp,
     ) -> Result<String, Box<dyn std::error::Error>> {
+        let state = app.fret_dancer_state.as_ref().unwrap();
         let animator = Animator::new(
             state.avatar_info.file.clone(),
             state.left_hand_recorder_file.clone(),
@@ -268,13 +276,16 @@ impl FretDancer {
         Ok(state.left_hand_animation_file.clone())
     }
 
-    pub fn generate_right_hand_motion_and_animation<F>(
-        state: &FretDancerState,
-        progress_callback: F,
-    ) -> Result<String, Box<dyn std::error::Error>>
-    where
-        F: Fn(&str),
-    {
+    pub fn generate_right_hand_motion_and_animation(
+        app: &mut FretDanceApp,
+        tx: mpsc::Sender<String>,
+    ) -> Result<String, Box<dyn std::error::Error>> {
+        let progress_callback = move |message: &str| {
+            let _ = tx.send(message.to_string());
+        };
+
+        // 克隆state用于线程
+        let state = app.fret_dancer_state.as_ref().unwrap().clone();
         let animator = Animator::new(
             state.avatar_info.file.clone(),
             state.left_hand_recorder_file.clone(),
@@ -285,7 +296,7 @@ impl FretDancer {
 
         // 处理右手部分
         progress_callback(&format!(
-            "开始生成右手演奏数据：{}\n",
+            "开始生成右手演奏数据：{}",
             state.avatar_info.instrument
         ));
 
@@ -299,6 +310,8 @@ impl FretDancer {
                 &right_hand_recorder_data,
                 &state.right_hand_animation_file,
             )?;
+
+            progress_callback("完成右手数据生成");
         } else {
             let init_right_hand = RightHand::new(
                 vec![],
@@ -340,14 +353,20 @@ impl FretDancer {
                 &state.right_hand_recorder_file,
                 &state.right_hand_animation_file,
             )?;
+
+            progress_callback("完成右手数据生成");
         }
 
         Ok(state.right_hand_animation_file.clone())
     }
     pub fn generate_string_vibration_data(
         state: &FretDancerState,
-        console_output: &mut String,
+        tx: mpsc::Sender<String>,
     ) -> Result<String, Box<dyn std::error::Error>> {
+        let tx_cloned = tx.clone();
+        let console_callback = move |message: &str| {
+            let _ = tx_cloned.send(message.to_string());
+        };
         let animator = Animator::new(
             state.avatar_info.file.clone(),
             state.left_hand_recorder_file.clone(),
@@ -356,48 +375,88 @@ impl FretDancer {
             state.max_string_index as f64,
         )?;
 
-        console_output.push_str("开始生成吉他弦动画数据\n");
+        console_callback("开始生成吉他弦动画数据");
 
         animator.animated_guitar_string(
             &state.left_hand_recorder_file,
             &state.guitar_string_recorder_file,
         )?;
 
+        console_callback("完成吉他弦动画数据生成");
+
+        match FretDancer::export_final_report(state, tx.clone()) {
+            Ok(()) => {}
+            Err(e) => {
+                let _ = tx.send(format!("生成最终报告失败: {}", e));
+            }
+        };
+
         Ok(state.guitar_string_recorder_file.clone())
     }
 
-    pub fn main<F>(
+    pub fn export_final_report(
+        state: &FretDancerState,
+        tx: mpsc::Sender<String>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let console_callback = move |message: &str| {
+            let _ = tx.send(message.to_string());
+        };
+
+        let avatar_name = &state.avatar_info.name;
+        let file_name = &state.filename;
+        let track_number_string = &state.track_number_string;
+        let left_hand_animation_file = &state.left_hand_animation_file;
+        let right_hand_animation_file = &state.right_hand_animation_file;
+        let guitar_string_recorder_file = &state.guitar_string_recorder_file;
+
+        let content = serde_json::json!({
+            "left_hand_animation_file": left_hand_animation_file,
+            "right_hand_animation_file": right_hand_animation_file,
+            "guitar_string_recorder_file": guitar_string_recorder_file,
+        });
+
+        let report_file = format!(
+            "output/final_result/{}_{}_{}.json",
+            avatar_name, file_name, track_number_string
+        );
+
+        std::fs::create_dir_all("output/final_result")?;
+        std::fs::write(&report_file, serde_json::to_string_pretty(&content)?)?;
+
+        console_callback(&format!("报告已保存至: {}", report_file));
+        Ok(())
+    }
+
+    pub fn main(
         app: &mut FretDanceApp,
-        callback: F,
-    ) -> Result<String, Box<dyn std::error::Error>>
-    where
-        F: Fn(&str),
-    {
+        tx: mpsc::Sender<String>,
+    ) -> Result<String, Box<dyn std::error::Error>> {
         // 初始化
-        let state = Self::initialize(app)?;
+        let state = Self::initialize(app, tx.clone())?;
+        app.fret_dancer_state = Some(state);
+        let state_clone = app.fret_dancer_state.as_ref().unwrap().clone();
 
         // 生成左手动作
-        Self::generate_left_hand_motion(&state, app.use_harm_notes, &callback)?;
+        Self::generate_left_hand_motion(app, tx.clone())?;
 
         // 生成左手动画
-        Self::generate_left_hand_animation(&state)?;
+        Self::generate_left_hand_animation(app)?;
 
         // 生成右手动作和动画
-        Self::generate_right_hand_motion_and_animation(&state, &callback)?;
+        Self::generate_right_hand_motion_and_animation(app, tx.clone())?;
 
         // 生成弦振动数据
-        Self::generate_string_vibration_data(&state, &mut app.console_output)?;
+        Self::generate_string_vibration_data(&state_clone, tx.clone())?;
 
         let final_info = format!(
             "全部执行完毕:\nrecorder文件被保存到了:{} 和 {}\n动画文件被保存到了:{} 和 {}\n吉它弦动画文件被保存到了:{}",
-            state.left_hand_recorder_file,
-            state.right_hand_recorder_file,
-            state.left_hand_animation_file,
-            state.right_hand_animation_file,
-            state.guitar_string_recorder_file
+            state_clone.left_hand_recorder_file,
+            state_clone.right_hand_recorder_file,
+            state_clone.left_hand_animation_file,
+            state_clone.right_hand_animation_file,
+            state_clone.guitar_string_recorder_file
         );
 
-        app.console_output.push_str(&final_info);
         Ok(final_info)
     }
 }
