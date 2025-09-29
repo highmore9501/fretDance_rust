@@ -356,14 +356,17 @@ impl LeftHand {
         // 1~4 号手指的触弦数，下标 0 不用
         let mut finger_touch_string_counter = vec![0; 5];
 
-        // 用于计算下一个手型把位的值，一开始它是统计的最低手指所按的品，统计完以后再根据情况来计算
-        let new_hand_position;
+        let mut index_finger_fret: i32 = 0;
 
         // 第一次循环，处理空弦音，并且计算各个手指的触弦总数,更新最高和最低按弦索引，更新使用的手指索引
         for finger_position in finger_positions {
             let fret = finger_position.fret;
             let finger_index = finger_position.finger;
             let string_index = finger_position.string_index;
+
+            if finger_index == 1 {
+                index_finger_fret = fret;
+            }
 
             // 生成空弦音的手指
             if finger_index == -1 {
@@ -405,14 +408,19 @@ impl LeftHand {
 
         // 生成按弦手指
         for (pressed_finger_index, (pressed_fret, pressed_string_index)) in &pressed_finger_dict {
-            let pressed_finger = LeftFinger::new(
-                *pressed_finger_index,
-                &guitar.guitar_strings[*pressed_string_index as usize].clone(),
-                *pressed_fret,
-                "Pressed",
-            );
+            if *pressed_fret == index_finger_fret && *pressed_string_index != 1 {
+                // 如果碰到非食指但与食指的 fret 值相同，则添加到休息手指列表中
+                rest_finger_index_set.insert(*pressed_finger_index);
+            } else {
+                let pressed_finger = LeftFinger::new(
+                    *pressed_finger_index,
+                    &guitar.guitar_strings[*pressed_string_index as usize].clone(),
+                    *pressed_fret,
+                    "Pressed",
+                );
 
-            pressed_fingers.push(pressed_finger);
+                pressed_fingers.push(pressed_finger);
+            }
         }
 
         // 生成横按手指
@@ -450,26 +458,35 @@ impl LeftHand {
             barre_fingers.push(barre_finger);
         }
 
-        // 处理未参与演奏的手指，看它们是横按还是否保留或者休息,在最后面生成保留指
-        if !used_finger_index_set.is_empty() && !used_finger_fret_set.is_empty() {
-            new_hand_position = std::cmp::max(
-                1,
-                *used_finger_fret_set.iter().min().unwrap()
-                    - (*used_finger_index_set.iter().min().unwrap() - 1),
-            );
-        } else {
-            // 如果没有按弦手指，使用当前手的位置或者默认位置
-            new_hand_position = self.hand_position;
-        }
+        // 基于新按弦手指计算初步手位置
+        let new_hand_position =
+            if !used_finger_index_set.is_empty() && !used_finger_fret_set.is_empty() {
+                std::cmp::max(
+                    1,
+                    *used_finger_fret_set.iter().min().unwrap()
+                        - (*used_finger_index_set.iter().min().unwrap() - 1),
+                )
+            } else {
+                // 如果没有按弦手指，使用当前手的位置或者默认位置
+                self.hand_position
+            };
 
+        // 判断是否需要换把
+        let need_position_change = new_hand_position != self.hand_position;
+
+        // 处理保留手指，需要考虑保留手指是否与新位置冲突
         for old_finger_index in 1..5 {
+            //跳过已经在休息指里的手指
+            if rest_finger_index_set.contains(&old_finger_index) {
+                continue;
+            }
             // 跳过已按的指
             if used_finger_index_set.contains(&old_finger_index) {
                 continue;
             }
 
             // 发生了换把没必要处理保留指，把手指移动到休息位置
-            if new_hand_position != self.hand_position {
+            if need_position_change {
                 rest_finger_index_set.insert(old_finger_index);
                 continue;
             }
@@ -480,6 +497,14 @@ impl LeftHand {
                 .iter()
                 .find(|f| f.finger_index == old_finger_index)
                 .unwrap();
+
+            let old_press = same_finger.press.to_i32();
+
+            // 非按弦状态的手指直接移动到休息指去
+            if old_press == 0 {
+                rest_finger_index_set.insert(old_finger_index);
+                continue;
+            }
 
             let old_fret = same_finger.fret;
             let old_string_index = same_finger.string_index;
@@ -515,6 +540,54 @@ impl LeftHand {
                 continue;
             }
 
+            // 检查食指位置冲突：如果食指是保留指，检查其他手指是否在同一品位
+            // 或者其他手指是保留指，检查是否与食指品位冲突
+            if old_finger_index == 1 {
+                // 食指作为保留指，检查其他新按弦手指是否在同一品位
+                for (_pressed_finger_index, (pressed_fret, _pressed_string_index)) in
+                    &pressed_finger_dict
+                {
+                    if old_fret == *pressed_fret {
+                        finger_can_keep = false;
+                        break;
+                    }
+                }
+
+                if finger_can_keep {
+                    for (_barre_finger_index, (barre_fret, _barre_string_index_val)) in
+                        &barre_finger_dict
+                    {
+                        if old_fret == *barre_fret {
+                            finger_can_keep = false;
+                            break;
+                        }
+                    }
+                }
+            } else {
+                // 其他手指作为保留指，检查是否与食指位置冲突
+                // 查找食指是否在新按弦手指中
+                if let Some((index_fret, _index_string)) = pressed_finger_dict.get(&1) {
+                    if old_fret == *index_fret {
+                        finger_can_keep = false;
+                    }
+                }
+
+                // 查找食指是否在横按手指中
+                if finger_can_keep {
+                    if let Some((index_fret, _index_string)) = barre_finger_dict.get(&1) {
+                        if old_fret == *index_fret {
+                            finger_can_keep = false;
+                        }
+                    }
+                }
+            }
+
+            // 如果有食指位置冲突，结束检测，直接将旧位置的手指索引添加休息指索引列中
+            if !finger_can_keep {
+                rest_finger_index_set.insert(old_finger_index);
+                continue;
+            }
+
             // 能运行到这里的都是保留指，直接用原状态生成新的保留指
             let press_state = same_finger.press;
 
@@ -523,7 +596,7 @@ impl LeftHand {
                 && same_finger.finger_index == 1
                 && !used_string_index_set.is_empty()
             {
-                if same_finger.string_index <= *used_string_index_set.iter().max().unwrap() {
+                if same_finger.string_index >= *used_string_index_set.iter().max().unwrap() {
                     keep_barre = true;
                 }
             }
