@@ -399,3 +399,13 @@ pub fn get_string_touch_position(
     let scaled_d_dir = scale_vector(&d_dir, t);
     Ok(add_vectors(&s, &scaled_d_dir))
 }
+
+/// 基于权重的Vector3线性插值
+pub fn lerp_by_weight_vector3(value_1: &Vector3, value_2: &Vector3, weight: f64) -> Vector3 {
+    // 确保权重在[0, 1]范围内
+    let clamped_weight = weight.max(0.0).min(1.0);
+
+    // 使用线性插值公式: result = value_1 + (value_2 - value_1) * weight
+    let diff = value_2.subtract(value_1);
+    value_1.add(&diff.scale(clamped_weight))
+}

@@ -9,7 +9,8 @@ use crate::hand::left_finger::PressState;
 use crate::midi::midi_to_note::PitchWheelInfo;
 use crate::utils::util_methods::{
     Quaternion, Vector3, add_vectors, get_string_touch_position, lerp_by_fret_quaternion,
-    lerp_by_fret_vector3, scale_vector, slerp, subtract_vectors, vector_norm,
+    lerp_by_fret_vector3, lerp_by_weight_vector3, scale_vector, slerp, subtract_vectors,
+    vector_norm,
 };
 
 /// 左手手指索引字典常量
@@ -1921,6 +1922,8 @@ impl Animator {
         let p_normal_fret_02 = lerp_by_fret_vector3(fret, &p0_vector, &p2_vector);
         let p_normal_fret_13 = lerp_by_fret_vector3(fret, &p1_vector, &p3_vector);
 
+        let hand_state_weight = hand_state as f64 / self.max_string_index;
+
         if hand_state == 0 {
             Ok(lerp_by_fret_vector3(
                 fret,
@@ -1994,7 +1997,11 @@ impl Animator {
             let p_outer = lerp_by_fret_vector3(fret, &out_p0_vector, &out_p2_vector);
 
             let p_normal = lerp_by_fret_vector3(fret, &p_normal_fret_02, &p_normal_fret_13);
-            Ok(lerp_by_fret_vector3(fret, &p_normal, &p_outer))
+            Ok(lerp_by_weight_vector3(
+                &p_normal,
+                &p_outer,
+                hand_state_weight,
+            ))
         } else {
             let (inner_p1_array, inner_p3_array) = if value_type == "position" {
                 let inner_data_dict = self
@@ -2062,7 +2069,11 @@ impl Animator {
             let p_inner = lerp_by_fret_vector3(fret, &inner_p1_vector, &inner_p3_vector);
 
             let p_normal = lerp_by_fret_vector3(fret, &p_normal_fret_02, &p_normal_fret_13);
-            Ok(lerp_by_fret_vector3(fret, &p_normal, &p_inner))
+            Ok(lerp_by_weight_vector3(
+                &p_normal,
+                &p_inner,
+                -hand_state_weight,
+            ))
         }
     }
 
@@ -2074,6 +2085,8 @@ impl Animator {
     ) -> Result<Vector3, Box<dyn std::error::Error>> {
         // 这个值其实相当于食指的索引除以最大弦的索引，它与hand_state一起，
         // 可以表达出当前手型的食指和小拇指的弦索引，并且可以在三种不同手型中进行插值计算
+
+        let hand_state_weight = hand_state as f64 / self.max_string_index;
 
         let (p0_array, p1_array, p2_array, p3_array) = if value_type == "position" {
             let p0_array = self
@@ -2210,7 +2223,11 @@ impl Animator {
             let p_outer = lerp_by_fret_vector3(fret, &out_p0_vector, &out_p2_vector);
 
             let p_normal = lerp_by_fret_vector3(fret, &p_normal_fret_02, &p_normal_fret_13);
-            Ok(lerp_by_fret_vector3(fret, &p_normal, &p_outer))
+            Ok(lerp_by_weight_vector3(
+                &p_normal,
+                &p_outer,
+                hand_state_weight,
+            ))
         } else {
             let (inner_p1_array, inner_p3_array) = if value_type == "position" {
                 let inner_p1_array = self
@@ -2265,7 +2282,11 @@ impl Animator {
             let p_inner = lerp_by_fret_vector3(fret, &inner_p1_vector, &inner_p3_vector);
 
             let p_normal = lerp_by_fret_vector3(fret, &p_normal_fret_02, &p_normal_fret_13);
-            Ok(lerp_by_fret_vector3(fret, &p_normal, &p_inner))
+            Ok(lerp_by_weight_vector3(
+                &p_normal,
+                &p_inner,
+                -hand_state_weight,
+            ))
         }
     }
 
