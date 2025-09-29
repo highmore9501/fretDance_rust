@@ -77,11 +77,10 @@ pub fn show_midi_info_scan(app: &mut FretDanceApp, ui: &mut egui::Ui) {
 
                         // 下拉菜单选择轨道号 (0-16)
                         egui::ComboBox::from_id_source("track_select")
-                            .selected_text(format!("轨道 {}", app.selected_track))
+                            .selected_text(format!("{}", app.selected_track))
                             .show_ui(ui, |ui| {
                                 for i in 0..=16 {
-                                    if ui.selectable_label(false, format!("轨道 {}", i)).clicked()
-                                    {
+                                    if ui.selectable_label(false, format!("{}", i)).clicked() {
                                         app.selected_track = i;
                                     }
                                 }

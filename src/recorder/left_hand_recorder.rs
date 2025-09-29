@@ -141,9 +141,6 @@ impl LeftHandRecorder {
             });
         }
 
-        // 统计去重前的数量
-        let original_count = hands_dict.len();
-
         // 根据frame去重，保留每个frame第一次出现的记录
         let mut unique_hands_dict = Vec::new();
         let mut seen_frames = std::collections::HashSet::new();

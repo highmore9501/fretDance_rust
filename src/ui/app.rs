@@ -1,4 +1,5 @@
 use crate::fret_dancer::FretDancerState;
+use crate::ui::theme;
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 use std::sync::mpsc;
@@ -171,7 +172,7 @@ impl FretDanceApp {
         egui_extras::install_image_loaders(&cc.egui_ctx);
 
         let mut app = Self {
-            avatar: "户山香澄".to_string(),
+            avatar: "Miku".to_string(),
             midi_file_path: "asset/midi/Sunburst.mid".to_string(),
             track_numbers_str: "1".to_string(),
             selected_track: 1,
@@ -349,24 +350,36 @@ impl eframe::App for FretDanceApp {
 
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.heading("Fret Dance");
+                ui.add(egui::Label::new(
+                    egui::RichText::new("FretDance")
+                        .color(theme::get_title_color(ui, false)) // 使用主题定义的标签颜色
+                        .size(20.0),
+                ));
+
+                // 方法3: 使用组合图标模拟吉他
+                ui.add_space(5.0);
+                ui.add(egui::Label::new(
+                    egui::RichText::new("🎸")
+                        .size(20.0)
+                        .color(egui::Color32::from_hex("#b044eeff").unwrap()),
+                ));
 
                 // 标签页导航
                 ui.separator();
                 if ui
-                    .selectable_label(self.current_tab == Tab::ParameterSetting, "角色参数设置")
+                    .selectable_label(self.current_tab == Tab::ParameterSetting, "角色设置")
                     .clicked()
                 {
                     self.current_tab = Tab::ParameterSetting;
                 }
                 if ui
-                    .selectable_label(self.current_tab == Tab::MidiInfoScan, "MIDI参数设置")
+                    .selectable_label(self.current_tab == Tab::MidiInfoScan, "MIDI选择")
                     .clicked()
                 {
                     self.current_tab = Tab::MidiInfoScan;
                 }
                 if ui
-                    .selectable_label(self.current_tab == Tab::ExecuteOperation, "执行操作")
+                    .selectable_label(self.current_tab == Tab::ExecuteOperation, "生成动画")
                     .clicked()
                 {
                     self.current_tab = Tab::ExecuteOperation;

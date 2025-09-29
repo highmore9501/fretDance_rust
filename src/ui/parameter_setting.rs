@@ -18,7 +18,7 @@ pub fn show_parameter_setting(app: &mut FretDanceApp, ui: &mut egui::Ui) {
                     .show(ui, |ui| {
                         ui.vertical(|ui| {
                             ui.add(egui::Label::new(
-                                egui::RichText::new("角色参数设置")
+                                egui::RichText::new("角色参数")
                                     .size(20.0)
                                     .color(theme::get_title_color(ui, true)) // 使用主题定义的标题颜色
                                     .strong(),
