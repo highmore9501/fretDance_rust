@@ -1,3 +1,4 @@
+pub mod about;
 pub mod app;
 pub mod avatar;
 pub mod avatar_display;

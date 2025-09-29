@@ -3,6 +3,8 @@ use eframe::egui;
 use serde::{Deserialize, Serialize};
 use std::sync::mpsc;
 
+use crate::ui::about::show_about_dialog;
+
 // 标签页枚举
 #[derive(Clone, Copy, PartialEq)]
 pub enum Tab {
@@ -107,6 +109,9 @@ pub struct FretDanceApp {
     // 当前活动的标签页
     pub(crate) current_tab: Tab,
 
+    // 添加关于对话框显示控制字段
+    pub(crate) show_about_dialog: bool,
+
     // FretDancer状态，用于在操作间共享
     pub fret_dancer_state: Option<FretDancerState>,
 
@@ -150,8 +155,8 @@ impl Clone for FretDanceApp {
             midi_info_result: self.midi_info_result.clone(),
             scanning_midi: self.scanning_midi,
             current_tab: self.current_tab,
+            show_about_dialog: self.show_about_dialog,
             fret_dancer_state: self.fret_dancer_state.clone(),
-            // 不能克隆的字段设置为默认值
             output_receiver: None,
             is_processing: false,
         }
@@ -257,6 +262,7 @@ impl FretDanceApp {
             midi_info_result: String::new(),
             scanning_midi: false,
             current_tab: Tab::ParameterSetting,
+            show_about_dialog: false,
             fret_dancer_state: None,
             output_receiver: None,
             is_processing: false,
@@ -368,6 +374,12 @@ impl eframe::App for FretDanceApp {
 
                 // 将主题切换开关放在右上角
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    // 添加帮助菜单
+                    ui.menu_button("帮助", |ui| {
+                        if ui.button("关于").clicked() {
+                            self.show_about_dialog = true;
+                        }
+                    });
                     // 添加主题切换开关
                     if ui.checkbox(&mut self.dark_mode, "暗色主题").changed() {
                         crate::ui::theme::apply_theme(self.dark_mode, ctx);
@@ -375,6 +387,11 @@ impl eframe::App for FretDanceApp {
                 });
             });
         });
+
+        // 显示关于对话框
+        if self.show_about_dialog {
+            show_about_dialog(self, ctx);
+        }
 
         egui::CentralPanel::default().show(ctx, |ui| match self.current_tab {
             Tab::ParameterSetting => crate::ui::parameter_setting::show_parameter_setting(self, ui),

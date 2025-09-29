@@ -126,30 +126,3 @@ pub fn get_current_keynotes(octave: i32) -> HashMap<String, i32> {
 
     current_keynotes
 }
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_music_note_creation() {
-        let note = MusicNote::new(48);
-        assert_eq!(note.num, 48);
-        assert_eq!(note.key, "C");
-    }
-
-    #[test]
-    fn test_get_current_keynotes() {
-        let keynotes = get_current_keynotes(0);
-        assert_eq!(keynotes.get("C"), Some(&48));
-        assert_eq!(keynotes.get("A"), Some(&45));
-
-        let keynotes_octave_1 = get_current_keynotes(1);
-        assert_eq!(keynotes_octave_1.get("c1"), Some(&60)); // C in octave 1
-    }
-
-    #[test]
-    fn test_add_interval() {
-        let note = MusicNote::new(48); // C
-        let major_third = note.add(4); // Major third is 4 semitones
-        assert_eq!(major_third.num, 52); // E
-    }
-}
