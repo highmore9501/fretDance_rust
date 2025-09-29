@@ -5,4 +5,5 @@ pub mod avatar_display;
 pub mod execute_operation;
 pub mod midi_info_scan;
 pub mod parameter_setting;
+pub mod show_console;
 pub mod theme;
