@@ -16,7 +16,7 @@ fn set_dark_theme(ctx: &egui::Context) {
     // 设置暗色主题的基本颜色 - 使用更现代的深灰色而非纯黑
     style.visuals = egui::Visuals::dark();
 
-    // 使用更柔和的深色背景
+    // 设置自定义颜色
     style.visuals.extreme_bg_color = egui::Color32::from_rgb(30, 30, 30); // 窗口背景 - 深灰
     style.visuals.panel_fill = egui::Color32::from_rgb(25, 25, 25); // 面板背景 - 深灰
     style.visuals.window_fill = egui::Color32::from_rgb(20, 20, 20); // 窗口填充 - 更深的灰
@@ -65,4 +65,57 @@ fn set_light_theme(ctx: &egui::Context) {
 
     // 应用样式
     ctx.set_style(style);
+}
+
+// 获取MIDI参数设置部分的背景色
+pub fn get_midi_param_bg_color(ui: &egui::Ui) -> egui::Color32 {
+    if ui.style().visuals.dark_mode {
+        egui::Color32::from_rgb(30, 30, 40) // 深色主题下的背景色
+    } else {
+        egui::Color32::from_rgb(240, 240, 250) // 浅色主题下的背景色
+    }
+}
+
+// 获取MIDI信息部分的背景色
+pub fn get_midi_info_bg_color(ui: &egui::Ui) -> egui::Color32 {
+    if ui.style().visuals.dark_mode {
+        egui::Color32::from_rgb(25, 25, 35) // 深色主题下的背景色
+    } else {
+        egui::Color32::from_rgb(235, 235, 245) // 浅色主题下的背景色
+    }
+}
+
+// 获取边框颜色
+pub fn get_border_color(ui: &egui::Ui) -> egui::Color32 {
+    if ui.style().visuals.dark_mode {
+        egui::Color32::from_rgb(70, 70, 90) // 深色主题下的边框色
+    } else {
+        egui::Color32::from_rgb(180, 180, 200) // 浅色主题下的边框色
+    }
+}
+
+// 获取标题颜色
+pub fn get_title_color(ui: &egui::Ui, is_midi_param: bool) -> egui::Color32 {
+    if ui.style().visuals.dark_mode {
+        if is_midi_param {
+            egui::Color32::from_rgb(100, 200, 255) // 深色主题下MIDI参数设置标题颜色
+        } else {
+            egui::Color32::from_rgb(255, 200, 100) // 深色主题下MIDI信息标题颜色
+        }
+    } else {
+        if is_midi_param {
+            egui::Color32::from_rgb(30, 100, 180) // 浅色主题下MIDI参数设置标题颜色
+        } else {
+            egui::Color32::from_rgb(180, 100, 30) // 浅色主题下MIDI信息标题颜色
+        }
+    }
+}
+
+// 获取标签文字颜色
+pub fn get_label_color(ui: &egui::Ui) -> egui::Color32 {
+    if ui.style().visuals.dark_mode {
+        egui::Color32::from_rgb(200, 200, 200) // 深色主题下标签颜色
+    } else {
+        egui::Color32::from_rgb(80, 80, 100) // 浅色主题下标签颜色
+    }
 }

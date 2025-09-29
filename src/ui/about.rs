@@ -12,9 +12,6 @@ pub fn show_about_dialog(app: &mut FretDanceApp, ctx: &egui::Context) {
             // 设置整体居中对齐
             ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
                 
-                
-                
-                
                 // 应用描述
                 ui.add(egui::Label::new(
                     egui::RichText::new("一个将MIDI信息转换为吉他动画的工具")
@@ -85,7 +82,7 @@ pub fn show_about_dialog(app: &mut FretDanceApp, ctx: &egui::Context) {
                         egui::RichText::new("版本:")
                             .size(14.0)
                     ));
-                    ui.label("1.0.0");
+                    ui.label("0.1.0");
                 });
                 
                 ui.add_space(5.0);

@@ -1,5 +1,6 @@
 use crate::ui::app::FretDanceApp;
 use crate::ui::avatar_display;
+use crate::ui::theme;
 use eframe::egui;
 
 pub fn show_parameter_setting(app: &mut FretDanceApp, ui: &mut egui::Ui) {
@@ -16,7 +17,12 @@ pub fn show_parameter_setting(app: &mut FretDanceApp, ui: &mut egui::Ui) {
                     .inner_margin(egui::Margin::same(10.0)) // 增加内边距
                     .show(ui, |ui| {
                         ui.vertical(|ui| {
-                            ui.heading("角色参数设置");
+                            ui.add(egui::Label::new(
+                                egui::RichText::new("角色参数设置")
+                                    .size(20.0)
+                                    .color(theme::get_title_color(ui, true)) // 使用主题定义的标题颜色
+                                    .strong(),
+                            ));
                             ui.separator();
 
                             // Avatar选择
@@ -122,7 +128,12 @@ pub fn show_parameter_setting(app: &mut FretDanceApp, ui: &mut egui::Ui) {
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.vertical(|ui| {
-                    ui.heading("控制台输出");
+                    ui.add(egui::Label::new(
+                        egui::RichText::new("控制台输出")
+                            .size(20.0)
+                            .color(theme::get_title_color(ui, false)) // 使用主题定义的标题颜色
+                            .strong(),
+                    ));
                     ui.separator();
 
                     egui::ScrollArea::vertical()

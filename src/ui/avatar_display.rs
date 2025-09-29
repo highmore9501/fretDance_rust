@@ -1,4 +1,5 @@
 use crate::ui::app::{EditAvatarMode, FretDanceApp, InstrumentType};
+use crate::ui::theme;
 use crate::utils::compare_json::compare_json_structure;
 use eframe::egui;
 
@@ -9,7 +10,12 @@ pub fn show_avatar_info(app: &mut FretDanceApp, ui: &mut egui::Ui) {
         .inner_margin(egui::Margin::same(10.0)) // 增加内边距
         .show(ui, |ui| {
             ui.vertical(|ui| {
-                ui.heading("Avatar信息");
+                ui.add(egui::Label::new(
+                    egui::RichText::new("人物信息")
+                        .size(20.0)
+                        .color(theme::get_title_color(ui, false)) // 使用主题定义的标题颜色
+                        .strong(),
+                ));
                 ui.separator();
 
                 // 显示avatar图片
@@ -134,7 +140,11 @@ pub fn show_edit_avatar_interface(app: &mut FretDanceApp, ui: &mut egui::Ui) {
                 } else {
                     "修改Avatar"
                 };
-                ui.heading(title);
+                ui.add(egui::Label::new(
+                    egui::RichText::new(title)
+                        .color(theme::get_title_color(ui, false)) // 使用主题定义的标签颜色
+                        .size(20.0),
+                ));
                 ui.separator();
 
                 // Avatar名字输入框
