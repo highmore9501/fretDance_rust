@@ -280,25 +280,27 @@ impl FretDanceApp {
     fn configure_fonts(ctx: &egui::Context) {
         let mut fonts = egui::FontDefinitions::default();
 
-        // 从系统加载微软雅黑字体
-        // 需要先将 msyh.ttc 字体文件复制到 asset/fonts/ 目录下
+        // 从系统加载HarmonyOS字体
+        // 需要先将字体文件复制到asset/fonts/目录下
         fonts.font_data.insert(
-            "Microsoft YaHei".to_owned(),
-            egui::FontData::from_static(include_bytes!("../../asset/fonts/msyh.ttc")),
+            "HarmonyOS Sans".to_owned(),
+            egui::FontData::from_static(include_bytes!(
+                "../../asset/fonts/HarmonyOS_Sans_SC_Regular.ttf"
+            )),
         );
 
-        // 将微软雅黑字体设置为默认字体
+        // 将HarmonyOS Sans字体设置为默认字体
         fonts
             .families
             .entry(egui::FontFamily::Proportional)
             .or_default()
-            .insert(0, "Microsoft YaHei".to_owned());
+            .insert(0, "HarmonyOS Sans".to_owned());
 
         fonts
             .families
             .entry(egui::FontFamily::Monospace)
             .or_default()
-            .insert(0, "Microsoft YaHei".to_owned());
+            .insert(0, "HarmonyOS Sans".to_owned());
 
         // 应用字体设置
         ctx.set_fonts(fonts.clone());

@@ -378,8 +378,8 @@ fn validate_json_file(app: &FretDanceApp) -> Result<(), String> {
     }
 
     // 定义参考文件
-    let electric_guitar_reference = "asset/controller_infos/Mavuika_E.json";
-    let other_instruments_reference = "asset/controller_infos/神里绫华-花时来信.json";
+    let electric_guitar_reference = "asset/controller_infos/default_electronic_guitar.json";
+    let other_instruments_reference = "asset/controller_infos/default_guitar.json";
 
     // 检查参考文件是否存在
     if !std::path::Path::new(electric_guitar_reference).exists() {
@@ -393,7 +393,6 @@ fn validate_json_file(app: &FretDanceApp) -> Result<(), String> {
     // 根据选择的乐器类型进行验证
     match app.edit_avatar_instrument {
         InstrumentType::ElectricGuitar => {
-            // 对于电吉他，检查是否与Mavuika_E.json结构相同
             match compare_json_structure(json_file_path, electric_guitar_reference) {
                 Ok(same_structure) => {
                     if same_structure {
@@ -416,7 +415,6 @@ fn validate_json_file(app: &FretDanceApp) -> Result<(), String> {
             }
         }
         InstrumentType::FingerStyleGuitar | InstrumentType::Bass => {
-            // 对于指弹吉他和贝斯，检查是否与神里绫华-花时来信.json结构相同
             match compare_json_structure(json_file_path, other_instruments_reference) {
                 Ok(same_structure) => {
                     if same_structure {

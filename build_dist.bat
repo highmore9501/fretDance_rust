@@ -14,6 +14,7 @@ echo 创建输出目录...
 mkdir fret_dance_dist\output\midi_info 2>nul
 mkdir fret_dance_dist\output\hand_recorder 2>nul
 mkdir fret_dance_dist\output\hand_animation 2>nul
-mkdir fret_dance_dist\output\guitar_string_recorder 2>nul
+mkdir fret_dance_dist\output\string_recorder 2>nul
+mkdir fret_dance_dist\output\final_result 2>nul
 
 echo 打包完成!
