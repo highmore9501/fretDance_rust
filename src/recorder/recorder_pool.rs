@@ -168,6 +168,14 @@ impl Ord for RecorderRef {
     }
 }
 
+/// 无法处理的音符信息结构体
+#[derive(Debug, Clone)]
+pub struct UnprocessableNoteInfo {
+    pub real_tick: f64,
+    pub notes: Vec<i32>,
+    pub reason: String,
+}
+
 /// 手势记录器池，使用优先队列实现
 pub struct HandPoseRecordPool {
     /// 优先队列，存储记录器（最大堆，熵值最大的在顶部）
@@ -176,6 +184,8 @@ pub struct HandPoseRecordPool {
     capacity: usize,
     /// 之前的手势记录器池
     pre_recorders: Vec<HandRecorder>,
+    /// 无法处理的音符组合列表
+    unprocessable_notes: Vec<UnprocessableNoteInfo>,
 }
 
 impl HandPoseRecordPool {
@@ -188,6 +198,7 @@ impl HandPoseRecordPool {
             recorders: BinaryHeap::with_capacity(capacity),
             capacity,
             pre_recorders: Vec::new(),
+            unprocessable_notes: Vec::new(),
         }
     }
 
@@ -276,10 +287,12 @@ impl HandPoseRecordPool {
 
         // 如果没有找到合适的按法，记录日志
         if finger_positions_list.is_empty() {
-            println!(
-                "当前tick是{}，当前notes是{:?},没有找到合适的按法。",
-                real_tick, processed_notes
-            );
+            // 保存无法处理的音符组合
+            self.unprocessable_notes.push(UnprocessableNoteInfo {
+                real_tick,
+                notes: processed_notes.clone(),
+                reason: "没有找到合适的按法".to_string(),
+            });
         }
 
         // 遍历之前的手势记录器和按法列表，生成新的记录器
@@ -386,6 +399,20 @@ impl HandPoseRecordPool {
         }
     }
 
+    /// 获取无法处理的音符组合列表
+    pub fn get_unprocessable_notes(&self) -> &Vec<UnprocessableNoteInfo> {
+        &self.unprocessable_notes
+    }
+
+    /// 获取无法处理的音符组合列表（可变引用）
+    pub fn get_unprocessable_notes_mut(&mut self) -> &mut Vec<UnprocessableNoteInfo> {
+        &mut self.unprocessable_notes
+    }
+
+    /// 清空无法处理的音符组合列表
+    pub fn clear_unprocessable_notes(&mut self) {
+        self.unprocessable_notes.clear();
+    }
     /// 更新记录器池
     pub fn update_left_handrecorder_pool<F>(
         &mut self,
@@ -497,9 +524,6 @@ impl HandPoseRecordPool {
 
         // 如果没有被使用的弦，直接返回
         if touched_strings.is_empty() {
-            for finger in left_hand {
-                print!("{} ", finger);
-            }
             return;
         }
 
@@ -732,6 +756,7 @@ impl HandPoseRecordPool {
         let total_steps = data.len();
         let start_time = Instant::now();
         let current_time = Instant::now();
+        progress_callback("==============================");
         progress_callback(&format!("开始处理右手数据，共 {} 项", total_steps));
 
         for i in 0..total_steps {

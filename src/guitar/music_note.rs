@@ -37,9 +37,9 @@ impl MusicNote {
         note
     }
 
-    /// 获取音符名称，如 `C`, [d](file://g:\fretDance\asset\midi\Angelina.mid), `F1`
+    /// 获取音符名称，如 `C`, `d`, `F1`
     pub fn get_keynote(&self) -> String {
-        let octave = (self.num - 45) / 12;
+        let octave = (self.num - 45).div_euclid(12);
         let current_keynotes = get_current_keynotes(octave);
 
         for (key, &value) in &current_keynotes {
@@ -60,33 +60,54 @@ impl MusicNote {
 }
 
 /// 根据八度值返回一个当前的音符字典
-/// octave: 八度
+/// octave: 八度偏移量
 pub fn get_current_keynotes(octave: i32) -> HashMap<String, i32> {
     let mut current_keynotes = HashMap::new();
 
-    for (key, value) in KEYNOTES.iter() {
-        let new_key = if octave == 0 {
-            key.to_string()
-        } else if octave > 0 {
-            // 将首字母转为小写并在后面加上八度数
-            let mut chars = key.chars();
-            if let Some(first_char) = chars.next() {
-                let rest: String = chars.collect();
-                format!("{}{}{}", first_char.to_lowercase(), octave, rest)
-            } else {
+    for (key, &value) in KEYNOTES.iter() {
+        let new_value = value + 12 * octave;
+        let new_key = match octave.cmp(&0) {
+            std::cmp::Ordering::Equal => {
+                // 基准八度，直接使用原始键名
                 key.to_string()
             }
-        } else {
-            // 负八度的情况
-            format!("{}{}", key.chars().next().unwrap_or('c'), -octave) + &key[1..]
+            std::cmp::Ordering::Greater => {
+                // 高于基准八度，将首字母转为小写
+                let mut chars = key.chars();
+                if let Some(first_char) = chars.next() {
+                    let rest: String = chars.collect();
+                    if octave == 1 {
+                        // 高一个八度只需要小写，不需要数字
+                        format!("{}{}", first_char.to_lowercase(), rest)
+                    } else {
+                        // 高两个或更多八度需要加上数字
+                        format!("{}{}{}", first_char.to_lowercase(), octave - 1, rest)
+                    }
+                } else {
+                    if octave == 1 {
+                        key.to_lowercase()
+                    } else {
+                        format!("{}{}", key.to_lowercase(), octave - 1)
+                    }
+                }
+            }
+            std::cmp::Ordering::Less => {
+                // 低于基准八度，使用大写并在后面加上数字
+                if octave == -1 {
+                    // 低一个八度，只需要在后面加上数字1
+                    format!("{}1", key)
+                } else {
+                    // 低两个或更多八度，数字为绝对值
+                    format!("{}{}", key, -octave)
+                }
+            }
         };
 
-        current_keynotes.insert(new_key, value + 12 * octave);
+        current_keynotes.insert(new_key, new_value);
     }
 
     current_keynotes
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;

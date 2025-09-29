@@ -5,6 +5,7 @@ use std::sync::mpsc;
 use crate::animate::animator::Animator;
 use crate::guitar::guitar_instance::Guitar;
 use crate::guitar::guitar_string::create_guitar_strings;
+use crate::guitar::music_note::MusicNote;
 use crate::hand::left_finger::LeftFinger;
 use crate::hand::left_hand::LeftHand;
 use crate::hand::right_hand::RightHand;
@@ -224,6 +225,7 @@ impl FretDancer {
         let mut current_recorder_num = 0;
         let mut previous_recorder_num = 0;
 
+        console_callback("==============================");
         console_callback("开始生成左手按弦数据");
 
         // 更新记录器池
@@ -256,6 +258,37 @@ impl FretDancer {
             state.ticks_per_beat,
             state.fps,
         )?;
+
+        let unprocessable_notes = left_hand_pose_record_pool.get_unprocessable_notes();
+        if !unprocessable_notes.is_empty() {
+            console_callback("生成过程中碰到左手无法按弦的音符组合：");
+
+            // 使用 HashSet 去重
+            let mut unique_notes = std::collections::HashSet::new();
+            for note in unprocessable_notes {
+                unique_notes.insert(&note.notes);
+            }
+
+            // 转换为 Vec 并排序以便输出一致
+            let mut sorted_notes: Vec<_> = unique_notes.into_iter().collect();
+            sorted_notes.sort();
+
+            for notes in sorted_notes {
+                // 将数字音符转换为音符名称
+                let note_names: Vec<String> = notes
+                    .iter()
+                    .map(|&num| {
+                        let music_note = MusicNote::new(num);
+                        music_note.get_keynote()
+                    })
+                    .collect();
+
+                console_callback(&format!(
+                    "音符数字: {:?}, 对应的音符名是: {:?}",
+                    notes, note_names
+                ));
+            }
+        }
 
         Ok(())
     }
@@ -376,6 +409,8 @@ impl FretDancer {
             state.max_string_index as f64,
         )?;
 
+        // 输出分隔符
+        console_callback("==============================");
         console_callback("开始生成吉他弦动画数据");
 
         animator.animated_guitar_string(
@@ -410,10 +445,27 @@ impl FretDancer {
         let right_hand_animation_file = &state.right_hand_animation_file;
         let guitar_string_recorder_file = &state.guitar_string_recorder_file;
 
+        // 获取当前工作目录的绝对路径
+        let current_dir = std::env::current_dir()?;
+
+        // 构造绝对路径
+        let left_hand_absolute_path = current_dir
+            .join(left_hand_animation_file)
+            .to_string_lossy()
+            .to_string();
+        let right_hand_absolute_path = current_dir
+            .join(right_hand_animation_file)
+            .to_string_lossy()
+            .to_string();
+        let guitar_string_absolute_path = current_dir
+            .join(guitar_string_recorder_file)
+            .to_string_lossy()
+            .to_string();
+
         let content = serde_json::json!({
-            "left_hand_animation_file": left_hand_animation_file,
-            "right_hand_animation_file": right_hand_animation_file,
-            "guitar_string_recorder_file": guitar_string_recorder_file,
+            "left_hand_animation_file": left_hand_absolute_path,
+            "right_hand_animation_file": right_hand_absolute_path,
+            "guitar_string_recorder_file": guitar_string_absolute_path,
         });
 
         let report_file = format!(
@@ -424,10 +476,11 @@ impl FretDancer {
         std::fs::create_dir_all("output/final_result")?;
         std::fs::write(&report_file, serde_json::to_string_pretty(&content)?)?;
 
-        console_callback(&format!("报告已保存至: {}", report_file));
+        // 获取报告文件的绝对路径
+        let report_absolute_path = current_dir.join(&report_file).to_string_lossy().to_string();
+        console_callback(&format!("报告已保存至: {}", report_absolute_path));
         Ok(())
     }
-
     pub fn main(
         app: &mut FretDanceApp,
         tx: mpsc::Sender<String>,

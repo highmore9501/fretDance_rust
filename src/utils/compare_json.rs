@@ -27,16 +27,6 @@ pub fn compare_json_structure(
     // 比较结构
     let same_structure = compare_values_structure(&json1, &json2);
 
-    // 如果结构不同，打印两个文件的结构
-    // if !same_structure {
-    //     println!("JSON结构不匹配!");
-    //     println!("\n第一个文件 {} 的结构:", file1_path);
-    //     print_json_structure(&json1);
-
-    //     println!("\n第二个文件 {} 的结构:", file2_path);
-    //     print_json_structure(&json2);
-    // }
-
     Ok(same_structure)
 }
 
