@@ -156,18 +156,8 @@ impl LeftHandRecorder {
             }
         }
 
-        // 统计去重后的数量和去重数量
-        let unique_count = unique_hands_dict.len();
-        let duplicates_removed = original_count - unique_count;
-
         // 根据frame排序
         unique_hands_dict.sort_by_key(|x| (x.frame * 1000.0) as i64);
-
-        // 输出去重统计信息
-        println!(
-            "去重统计: 原始记录 {} 条，去重后 {} 条，删除重复记录 {} 条",
-            original_count, unique_count, duplicates_removed
-        );
 
         // 写入文件
         let file = File::create(json_file_path)?;

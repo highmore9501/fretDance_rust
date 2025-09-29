@@ -2,7 +2,6 @@ use crate::fret_dancer::FretDancer;
 use crate::ui::app::FretDanceApp;
 use crate::ui::theme;
 use eframe::egui;
-use std::fmt::format;
 use std::sync::mpsc;
 use std::thread;
 

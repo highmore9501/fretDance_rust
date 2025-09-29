@@ -1801,10 +1801,6 @@ impl Animator {
         }
         // 情况3: 时间连插入预备状态都不够，只保留当前动作帧
         else {
-            println!(
-                "当前动作帧{}与下一帧{}之间时间不足，没有插入任何中间状态！",
-                current_frame, next_time
-            );
         }
 
         Ok(frames_to_insert)

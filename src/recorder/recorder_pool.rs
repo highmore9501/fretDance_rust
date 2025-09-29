@@ -367,10 +367,6 @@ impl HandPoseRecordPool {
 
         // 如果无法生成正常的按法，就取当前最佳的recoder，然后为它再添加一个最后的按法，清空其它的recorder
         if *current_recorder_num == 0 && !self.pre_recorders.is_empty() {
-            println!(
-                "前一次记录是{}个，当前生成记录数量为0",
-                *previous_recorder_num
-            );
             let best_recorder: &HandRecorder = self.get_best_pre_recorder();
 
             // 克隆最佳记录器的所有数据
@@ -393,8 +389,6 @@ impl HandPoseRecordPool {
                 );
 
                 self.insert_new_hand_pose_recorder(HandRecorder::Left(new_recorder), Some(0));
-
-                println!("重复最后一个手型，清空其它的recorder");
             }
         }
     }
