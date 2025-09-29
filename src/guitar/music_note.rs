@@ -81,7 +81,13 @@ pub fn get_current_keynotes(octave: i32) -> HashMap<String, i32> {
                         format!("{}{}", first_char.to_lowercase(), rest)
                     } else {
                         // 高两个或更多八度需要加上数字
-                        format!("{}{}{}", first_char.to_lowercase(), octave - 1, rest)
+                        // 如果包含#或b，数字应该放在基本音名之后，变音记号之前
+                        if rest.is_empty() {
+                            format!("{}{}", first_char.to_lowercase(), octave - 1)
+                        } else {
+                            // 有升降号的情况下，格式应为: 音名 + 八度数字 + 升降号
+                            format!("{}{}{}", first_char.to_lowercase(), octave - 1, rest)
+                        }
                     }
                 } else {
                     if octave == 1 {
@@ -92,13 +98,25 @@ pub fn get_current_keynotes(octave: i32) -> HashMap<String, i32> {
                 }
             }
             std::cmp::Ordering::Less => {
-                // 低于基准八度，使用大写并在后面加上数字
+                // 低于基准八度，使用大写并在基本音名后加上数字
+                // 如果包含#或b，数字应该放在基本音名之后，变音记号之前
+                let base_char = key.chars().next().unwrap_or_default();
+                let accidental: String = key.chars().skip(1).collect();
+
                 if octave == -1 {
-                    // 低一个八度，只需要在后面加上数字1
-                    format!("{}1", key)
+                    // 低一个八度
+                    if accidental.is_empty() {
+                        format!("{}1", key)
+                    } else {
+                        format!("{}1{}", base_char, accidental)
+                    }
                 } else {
                     // 低两个或更多八度，数字为绝对值
-                    format!("{}{}", key, -octave)
+                    if accidental.is_empty() {
+                        format!("{}{}", key, -octave)
+                    } else {
+                        format!("{}{}{}", base_char, -octave, accidental)
+                    }
                 }
             }
         };
@@ -108,7 +126,6 @@ pub fn get_current_keynotes(octave: i32) -> HashMap<String, i32> {
 
     current_keynotes
 }
-#[cfg(test)]
 mod tests {
     use super::*;
 
