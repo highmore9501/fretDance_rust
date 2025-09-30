@@ -478,7 +478,7 @@ impl FretDancer {
 
         // 获取报告文件的绝对路径
         let report_absolute_path = current_dir.join(&report_file).to_string_lossy().to_string();
-        console_callback(&format!("报告已保存至: {}", report_absolute_path));
+        console_callback(&format!("报告已保存至:\n{}", report_absolute_path));
         Ok(())
     }
     pub fn main(

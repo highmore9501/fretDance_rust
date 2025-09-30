@@ -264,28 +264,13 @@ impl MidiProcessor {
 
         let mut result = String::new();
 
-        // 用于统计每个channel的note_on事件数量
-        let mut note_count_by_channel: std::collections::HashMap<u8, u32> =
+        // 用于存储每个(track, channel)组合的乐器和音符计数
+        let mut track_channel_info: std::collections::HashMap<(usize, u8), (String, u32)> =
             std::collections::HashMap::new();
 
-        // 存储每个(track, channel)组合最新的乐器
-        let mut channel_instruments: std::collections::HashMap<(usize, u8), &str> =
-            std::collections::HashMap::new();
-
-        // 统计所有note_on消息
-        for track in &smf.tracks {
-            for event in track {
-                if let TrackEventKind::Midi { channel, message } = event.kind {
-                    if let midly::MidiMessage::NoteOn { .. } = message {
-                        *note_count_by_channel.entry(channel.as_int()).or_insert(0) += 1;
-                    }
-                }
-            }
-        }
-
-        // 跟踪每个channel最后使用的乐器
-        for (i, track) in smf.tracks.iter().enumerate() {
-            // 从轨道事件中查找轨道名称
+        // 遍历所有track和事件，收集乐器和音符信息
+        for (track_index, track) in smf.tracks.iter().enumerate() {
+            // 获取轨道名称
             let track_name = track
                 .iter()
                 .find_map(|event| {
@@ -297,45 +282,54 @@ impl MidiProcessor {
                 })
                 .unwrap_or("Unknown");
 
-            result.push_str(&format!("Track {}: {}\n", i, track_name));
+            result.push_str(&format!("Track {}: {}\n", track_index, track_name));
 
+            // 处理事件更新乐器和音符计数
             for event in track {
                 if let TrackEventKind::Midi { channel, message } = event.kind {
-                    if let midly::MidiMessage::ProgramChange { program } = message {
-                        let instrument_idx = program.as_int() as usize;
-                        if instrument_idx < self.midi_instruments.len() {
-                            let instrument = self.midi_instruments[instrument_idx];
-                            channel_instruments.insert((i, channel.as_int()), instrument);
+                    match message {
+                        midly::MidiMessage::ProgramChange { program } => {
+                            let instrument_idx = program.as_int() as usize;
+                            let instrument = if instrument_idx < self.midi_instruments.len() {
+                                self.midi_instruments[instrument_idx]
+                            } else {
+                                "Unknown instrument"
+                            };
+
+                            let entry = track_channel_info
+                                .entry((track_index, channel.as_int()))
+                                .or_insert_with(|| ("Unknown instrument".to_string(), 0));
+                            entry.0 = instrument.to_string();
                         }
+                        midly::MidiMessage::NoteOn { vel, .. } => {
+                            // 只有当音符开启(velocity > 0)时才计算
+                            if vel.as_int() > 0 {
+                                // 确保即使没有ProgramChange事件也记录channel
+                                track_channel_info
+                                    .entry((track_index, channel.as_int()))
+                                    .or_insert_with(|| ("Unknown instrument".to_string(), 0));
+                                // 增加音符计数
+                                track_channel_info
+                                    .get_mut(&(track_index, channel.as_int()))
+                                    .unwrap()
+                                    .1 += 1;
+                            }
+                        }
+                        _ => {}
                     }
                 }
             }
         }
 
-        // 创建一个按channel聚合的乐器信息
-        let mut channel_latest_instrument: std::collections::HashMap<u8, &str> =
-            std::collections::HashMap::new();
-        for ((_, channel), instrument) in &channel_instruments {
-            channel_latest_instrument.insert(*channel, instrument);
-        }
+        // 按照(track, channel)顺序输出结果
+        let mut sorted_entries: Vec<_> = track_channel_info.iter().collect();
+        sorted_entries.sort_by_key(|(key, _)| ((key.0, key.1)));
 
-        // 输出每个channel的信息
-        let mut channels: Vec<&u8> = note_count_by_channel.keys().collect();
-        channels.sort();
-
-        for channel in channels {
-            let note_count = note_count_by_channel[channel];
-            if let Some(instrument) = channel_latest_instrument.get(channel) {
-                result.push_str(&format!(
-                    "Channel {}: {} ({} notes)\n",
-                    channel, instrument, note_count
-                ));
-            } else {
-                result.push_str(&format!(
-                    "Channel {}: Unknown instrument ({} notes)\n",
-                    channel, note_count
-                ));
-            }
+        for (&(track, channel), (instrument, note_count)) in sorted_entries {
+            result.push_str(&format!(
+                "track {}, channel {}, {}, {} notes\n",
+                track, channel, instrument, note_count
+            ));
         }
 
         Ok(result)
