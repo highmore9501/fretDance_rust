@@ -511,7 +511,14 @@ impl HandPoseRecordPool {
                         .and_then(|v| v.as_i64())
                         .unwrap_or(0);
 
-                    touched_strings.push(string_index as i32);
+                    if press == 1 {
+                        touched_strings.push(string_index as i32);
+                    } else if press > 1 {
+                        // 当press大于1时，添加从string_index到0的所有弦索引
+                        for i in (0..=string_index).rev() {
+                            touched_strings.push(i as i32);
+                        }
+                    }
                 }
             }
         }

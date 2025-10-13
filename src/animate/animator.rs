@@ -63,10 +63,7 @@ impl Animator {
     ) -> Result<Self, Box<dyn Error>> {
         // 读取avatar JSON文件
         let avatar_path = format!("asset/controller_infos/{}", avatar_file);
-        println!(
-            "Reading avatar file: {} from avatar_file: {}",
-            avatar_path, avatar_file
-        );
+
         let file = File::open(avatar_path)?;
         let avatar_info: Value = serde_json::from_reader(file)?;
 
