@@ -1,6 +1,6 @@
 ## FretDance (Rust 重写版)
 
-![预览图](asset\img\20240517044031.png)
+![预览图](asset/img/20240517044031.png)
 
 [English Version Click Here](README.md)
 
