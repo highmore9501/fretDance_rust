@@ -1,6 +1,6 @@
 ## FretDance (Rust Rewrite)
 
-![pic](asset\img\20240517044031.png)
+![pic](asset/img/20240517044031.png)
 
 [中文说明点击这里](readmeCN.md)
 
