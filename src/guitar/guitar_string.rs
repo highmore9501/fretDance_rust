@@ -51,6 +51,7 @@ pub fn create_guitar_strings(notes: &Vec<&str>) -> Vec<GuitarString> {
     for (index, note) in notes.iter().enumerate() {
         let note_num = get_keynote_by_value(note);
         let base_note = MusicNote::new(note_num);
+
         let index = index as i32;
         // 第一弦是高音e弦
         guitar_strings.push(GuitarString::new(base_note, index));
@@ -73,7 +74,7 @@ pub fn get_keynote_by_value(value: &str) -> i32 {
     else if value.len() == 1 && value.chars().all(|c| c.is_ascii_lowercase()) {
         let upper_value = value.to_uppercase();
         if let Some(&num) = KEYNOTES.get(&upper_value.as_str()) {
-            return num;
+            return num + 12;
         }
     }
     // 如果value长度大于1，并且最后一个值是一个数字
@@ -86,7 +87,7 @@ pub fn get_keynote_by_value(value: &str) -> i32 {
         if prefix.chars().all(|c| c.is_ascii_lowercase()) {
             let first_char = &prefix[0..1].to_uppercase();
             if let Some(num) = KEYNOTES.get(&first_char.as_str()) {
-                return num + 12 * digit;
+                return num + 12 * (digit + 1);
             }
         }
         // 如果第一个值是大写并在KEYNOTES中，说明当前值是低音，数字越大音越低
