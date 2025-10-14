@@ -11,6 +11,7 @@ pub struct RightHand {
     pub pre_used_fingers: Vec<String>,
     pub is_arpeggio: bool,
     pub is_playing_bass: bool,
+    pub touched_strings: Vec<i32>,
 }
 
 impl RightHand {
@@ -20,6 +21,7 @@ impl RightHand {
         pre_used_fingers: Vec<String>,
         is_arpeggio: bool,
         is_playing_bass: bool,
+        touched_strings: Vec<i32>,
     ) -> Self {
         RightHand {
             used_fingers,
@@ -27,6 +29,7 @@ impl RightHand {
             pre_used_fingers,
             is_arpeggio,
             is_playing_bass,
+            touched_strings,
         }
     }
 

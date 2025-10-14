@@ -319,13 +319,14 @@ impl FretDancer {
 
         // 克隆state用于线程
         let state = app.fret_dancer_state.as_ref().unwrap().clone();
-        let animator = Animator::new(
+        let mut animator = Animator::new(
             state.avatar_info.file.clone(),
             state.left_hand_recorder_file.clone(),
             state.left_hand_animation_file.clone(),
             state.fps,
             state.max_string_index as f64,
         )?;
+        let _ = animator.init_arpeggio_patterns()?;
 
         // 处理右手部分
         progress_callback(&format!(
@@ -353,6 +354,7 @@ impl FretDancer {
                 vec![],
                 false,
                 is_playing_bass,
+                vec![],
             );
 
             let mut init_right_hand_recorder = RightHandRecorder::new();

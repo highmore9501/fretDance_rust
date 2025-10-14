@@ -582,6 +582,7 @@ impl HandPoseRecordPool {
                             last_hand.used_fingers.clone(),
                             is_arpeggio,
                             last_hand.is_playing_bass,
+                            touched_strings.clone(),
                         );
 
                         let entropy = last_hand.calculate_diff(&right_hand);

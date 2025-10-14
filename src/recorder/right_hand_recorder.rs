@@ -12,6 +12,7 @@ use crate::midi::midi_to_note::{MidiProcessor, TempoChange};
 pub struct RecordedRightHandInfo {
     pub used_fingers: Vec<String>,
     pub right_finger_positions: Vec<i32>,
+    pub touched_strings: Vec<i32>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -94,10 +95,12 @@ impl RightHandRecorder {
                 midi_processor.calculate_frame(tempo_changes, ticks_per_beat, fps, real_tick);
 
             let right_hand = &self.hand_pose_list[i];
+            let touched_strings = right_hand.touched_strings.clone();
 
             let hand_info = RecordedRightHandInfo {
                 used_fingers: right_hand.used_fingers.clone(),
                 right_finger_positions: right_hand.right_finger_positions.clone(),
+                touched_strings,
             };
 
             hands_dict.push(RecordedRightHand {

@@ -29,6 +29,29 @@ const RIGHT_FINGER_INDEX_DICT: [(&str, usize); 4] = [
     ("a", 3), // 无名指
 ];
 
+/// 扫弦方式数据结构，存储每种扫弦方式开始和结束时的手部位置信息路径
+#[derive(Debug, Clone)]
+pub struct ArpeggioPattern {
+    /// 扫弦开始时的手部位置信息路径
+    pub start_positions: ArpeggioPositions,
+    /// 扫弦结束时的手部位置信息路径
+    pub end_positions: ArpeggioPositions,
+}
+
+/// 扫弦时各种手部和手指的位置信息路径
+#[derive(Debug, Clone)]
+pub struct ArpeggioPositions {
+    pub h_r: &'static [&'static str],
+    pub h_rotation_r: &'static [&'static str],
+    pub hp_r: &'static [&'static str],
+    pub tp_r: &'static [&'static str],
+    pub t_r: &'static [&'static str],
+    pub i_r: &'static [&'static str],
+    pub m_r: &'static [&'static str],
+    pub r_r: &'static [&'static str],
+    pub p_r: &'static [&'static str],
+}
+
 /// 动画生成器，用于根据指法数据生成左手和右手动画
 pub struct Animator {
     /// 人物信息 (动态JSON数据)
@@ -43,6 +66,13 @@ pub struct Animator {
     fps: f64,
     /// 乐器最大弦索引
     max_string_index: f64,
+
+    /// 三种扫弦方式的数据
+    arpeggio_patterns: Vec<ArpeggioPattern>,
+    /// 当前使用的扫弦方式索引
+    current_arpeggio_pattern_index: usize,
+    /// 扫弦方式索引调用计数器，用于控制每两次调用才切换一次索引
+    current_arpeggio_pattern_index_call_count: usize,
 }
 
 impl Animator {
@@ -67,6 +97,11 @@ impl Animator {
         let file = File::open(avatar_path)?;
         let avatar_info: Value = serde_json::from_reader(file)?;
 
+        // 初始化空的扫弦方式列表和索引
+        let arpeggio_patterns: Vec<ArpeggioPattern> = Vec::new();
+        let current_arpeggio_pattern_index: usize = 0;
+        let current_arpeggio_pattern_index_call_count: usize = 0;
+
         Ok(Animator {
             avatar_info,
             avatar_file,
@@ -74,6 +109,9 @@ impl Animator {
             animation_file,
             fps,
             max_string_index,
+            arpeggio_patterns,
+            current_arpeggio_pattern_index,
+            current_arpeggio_pattern_index_call_count,
         })
     }
 
@@ -93,6 +131,125 @@ impl Animator {
             current = current.get(key)?;
         }
         Some(current)
+    }
+
+    /// 初始化三种扫弦方式的数据
+    /// todo: 更新新类型的数据
+    pub fn init_arpeggio_patterns(&mut self) -> Result<(), Box<dyn Error>> {
+        // 清空现有的扫弦方式列表
+        self.arpeggio_patterns.clear();
+
+        // 创建p型扫弦的开始位置数据路径
+        let p_style_start_positions = ArpeggioPositions {
+            h_r: &["RIGHT_HAND_POSITIONS", "Normal_P0_H_R"],
+            h_rotation_r: &["ROTATIONS", "H_rotation_R", "Normal", "P0"],
+            hp_r: &["RIGHT_HAND_POSITIONS", "Normal_P0_HP_R"],
+            tp_r: &["RIGHT_HAND_POSITIONS", "tp0"],
+            t_r: &["RIGHT_HAND_POSITIONS", "p0"],
+            i_r: &["RIGHT_HAND_POSITIONS", "i0"],
+            m_r: &["RIGHT_HAND_POSITIONS", "m0"],
+            r_r: &["RIGHT_HAND_POSITIONS", "a0"],
+            p_r: &["RIGHT_HAND_POSITIONS", "ch0"],
+        };
+
+        // 创建p型扫弦的结束位置数据路径
+        let p_style_end_positions = ArpeggioPositions {
+            h_r: &["RIGHT_HAND_POSITIONS", "Normal_Pend_H_R"],
+            h_rotation_r: &["ROTATIONS", "H_rotation_R", "Normal", "Pend"],
+            hp_r: &["RIGHT_HAND_POSITIONS", "Normal_Pend_HP_R"],
+            tp_r: &["RIGHT_HAND_POSITIONS", "tpend"],
+            t_r: &["RIGHT_HAND_POSITIONS", "pend"],
+            i_r: &["RIGHT_HAND_POSITIONS", "iend"],
+            m_r: &["RIGHT_HAND_POSITIONS", "mend"],
+            r_r: &["RIGHT_HAND_POSITIONS", "aend"],
+            p_r: &["RIGHT_HAND_POSITIONS", "chend"],
+        };
+
+        // 添加p型扫弦到扫弦方式列表
+        self.arpeggio_patterns.push(ArpeggioPattern {
+            start_positions: p_style_start_positions,
+            end_positions: p_style_end_positions,
+        });
+
+        // 创建i型扫弦的开始位置数据路径
+        let i_style_start_positions = ArpeggioPositions {
+            h_r: &["RIGHT_HAND_POSITIONS", "Normal_P3_H_R"],
+            h_rotation_r: &["ROTATIONS", "H_rotation_R", "Normal", "Pend"],
+            hp_r: &["RIGHT_HAND_POSITIONS", "Normal_P3_HP_R"],
+            tp_r: &["RIGHT_HAND_POSITIONS", "tp3"],
+            t_r: &["RIGHT_HAND_POSITIONS", "p3"],
+            i_r: &["RIGHT_HAND_POSITIONS", "iend"],
+            m_r: &["RIGHT_HAND_POSITIONS", "mend"],
+            r_r: &["RIGHT_HAND_POSITIONS", "aend"],
+            p_r: &["RIGHT_HAND_POSITIONS", "chend"],
+        };
+
+        // 创建i型扫弦的结束位置数据路径
+        let i_style_end_positions = ArpeggioPositions {
+            h_r: &["RIGHT_HAND_POSITIONS", "Normal_P0_H_R"],
+            h_rotation_r: &["ROTATIONS", "H_rotation_R", "Normal", "P0"],
+            hp_r: &["RIGHT_HAND_POSITIONS", "Normal_P0_HP_R"],
+            tp_r: &["RIGHT_HAND_POSITIONS", "tp0"],
+            t_r: &["RIGHT_HAND_POSITIONS", "p0"],
+            i_r: &["RIGHT_HAND_POSITIONS", "i0"],
+            m_r: &["RIGHT_HAND_POSITIONS", "m0"],
+            r_r: &["RIGHT_HAND_POSITIONS", "a0"],
+            p_r: &["RIGHT_HAND_POSITIONS", "ch0"],
+        };
+
+        // 添加i型扫弦到扫弦方式列表
+        self.arpeggio_patterns.push(ArpeggioPattern {
+            start_positions: i_style_start_positions,
+            end_positions: i_style_end_positions,
+        });
+
+        // 创建ma型扫弦的开始位置数据路径
+        let ma_style_start_positions = ArpeggioPositions {
+            h_r: &["RIGHT_HAND_POSITIONS", "Normal_P0_H_R"],
+            h_rotation_r: &["ROTATIONS", "H_rotation_R", "Normal", "P0"],
+            hp_r: &["RIGHT_HAND_POSITIONS", "Normal_P0_HP_R"],
+            tp_r: &["RIGHT_HAND_POSITIONS", "tp0"],
+            t_r: &["RIGHT_HAND_POSITIONS", "p0"],
+            i_r: &["RIGHT_HAND_POSITIONS", "i0"],
+            m_r: &["RIGHT_HAND_POSITIONS", "m0"],
+            r_r: &["RIGHT_HAND_POSITIONS", "a0"],
+            p_r: &["RIGHT_HAND_POSITIONS", "ch0"],
+        };
+
+        // 创建ma型扫弦的结束位置数据路径
+        let ma_style_end_positions = ArpeggioPositions {
+            h_r: &["RIGHT_HAND_POSITIONS", "Normal_P3_H_R"],
+            h_rotation_r: &["ROTATIONS", "H_rotation_R", "Normal", "Pend"],
+            hp_r: &["RIGHT_HAND_POSITIONS", "Normal_P3_HP_R"],
+            tp_r: &["RIGHT_HAND_POSITIONS", "tp3"],
+            t_r: &["RIGHT_HAND_POSITIONS", "p3"],
+            i_r: &["RIGHT_HAND_POSITIONS", "iend"],
+            m_r: &["RIGHT_HAND_POSITIONS", "mend"],
+            r_r: &["RIGHT_HAND_POSITIONS", "aend"],
+            p_r: &["RIGHT_HAND_POSITIONS", "chend"],
+        };
+
+        // 添加ma型扫弦到扫弦方式列表
+        self.arpeggio_patterns.push(ArpeggioPattern {
+            start_positions: ma_style_start_positions,
+            end_positions: ma_style_end_positions,
+        });
+
+        Ok(())
+    }
+
+    /// 获取当前扫弦方式索引并更新到下一个
+    /// 每两次调用才更新一次索引，因为每次扫弦包括开始和结束两个阶段
+    fn get_and_update_arpeggio_pattern_index(&mut self) -> usize {
+        let current_index = self.current_arpeggio_pattern_index;
+        // 每两次调用才更新一次索引（一次扫弦包含开始和结束两个阶段）
+        if self.current_arpeggio_pattern_index_call_count >= 1 {
+            self.current_arpeggio_pattern_index = (self.current_arpeggio_pattern_index + 1) % 3;
+            self.current_arpeggio_pattern_index_call_count = 0;
+        } else {
+            self.current_arpeggio_pattern_index_call_count += 1;
+        }
+        current_index
     }
 
     /// 在生成动画数据时插入pitchwheel信息
@@ -649,7 +806,7 @@ impl Animator {
     /// * `fps` - 帧率
     /// * `max_string_index` - 最大弦索引
     pub fn right_hand_2_animation(
-        &self,
+        &mut self,
         recorder_file: &str,
         animation_file: &str,
     ) -> Result<(), Box<dyn Error>> {
@@ -677,6 +834,9 @@ impl Animator {
             let right_finger_positions = right_hand
                 .get("right_finger_positions")
                 .ok_or("Missing rightFingerPositions in rightHand")?;
+            let touched_strings = right_hand
+                .get("touched_strings")
+                .ok_or("Missing touchedStrings in rightHand")?;
 
             // 这个usedFingers为空，表示是扫弦，所以播放时间要长一些
             let time_multiplier = if used_fingers.as_array().map_or(true, |arr| arr.is_empty()) {
@@ -704,13 +864,15 @@ impl Animator {
             let ready = self.calculate_right_hand_fingers(
                 right_finger_positions,
                 used_fingers,
-                false, // isAfterPlayed = false
+                touched_strings,
+                false,
             )?;
 
             let played = self.calculate_right_hand_fingers(
                 right_finger_positions,
                 used_fingers,
-                true, // isAfterPlayed = true
+                touched_strings,
+                true,
             )?;
 
             // 右手拨弦分为四个阶段，准备拨弦，拨弦，拨弦后维持动作，返回准备状态。
@@ -744,11 +906,11 @@ impl Animator {
     }
 
     /// 计算右手手指位置
-    /// 计算右手手指位置
     pub fn calculate_right_hand_fingers(
-        &self,
+        &mut self,
         right_finger_positions: &Value,
         used_fingers: &Value,
+        touched_strings: &Value,
         is_after_played: bool,
     ) -> Result<HashMap<String, Vec<f64>>, Box<dyn Error>> {
         // 解析参数
@@ -778,7 +940,20 @@ impl Animator {
 
         let used_fingers_vec = used_fingers_vec?;
 
-        let is_arpeggio = used_fingers_vec.is_empty();
+        let touched_strings_vec: Result<Vec<i32>, _> = touched_strings
+            .as_array()
+            .ok_or("touchedStrings is not an array")?
+            .iter()
+            .map(|v| {
+                v.as_i64()
+                    .ok_or("String value is not a number")
+                    .map(|i| i as i32)
+            })
+            .collect();
+
+        let touched_strings_vec = touched_strings_vec?;
+
+        let is_arpeggio = touched_strings_vec.len() > 4;
         let mut hand_position = 0.0;
 
         if !is_arpeggio {
@@ -865,7 +1040,7 @@ impl Animator {
 
     /// 新的计算手指位置方法
     fn get_fingers_position(
-        &self,
+        &mut self,
         right_finger_positions: &Vec<i32>,
         is_arpeggio: bool,
         is_after_played: bool,
@@ -888,60 +1063,36 @@ impl Animator {
         let (h_r, h_rotation_r, hp_r, tp_r, mut t_r, mut i_r, mut m_r, mut r_r, p_r);
 
         if is_arpeggio {
+            // 获取当前扫弦方式索引
+            let pattern_index = self.get_and_update_arpeggio_pattern_index();
+            let pattern = &self.arpeggio_patterns[pattern_index];
+
             if is_after_played {
-                h_r = self.get_avatar_nested_field_as_f64_vector(&[
-                    "RIGHT_HAND_POSITIONS",
-                    "Normal_Pend_H_R",
-                ])?;
-                h_rotation_r = self.get_avatar_nested_field_as_f64_vector(&[
-                    "ROTATIONS",
-                    "H_rotation_R",
-                    "Normal",
-                    "Pend",
-                ])?;
-                hp_r = self.get_avatar_nested_field_as_f64_vector(&[
-                    "RIGHT_HAND_POSITIONS",
-                    "Normal_Pend_HP_R",
-                ])?;
-                tp_r =
-                    self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "tpend"])?;
-                t_r =
-                    self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "pend"])?;
-                i_r =
-                    self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "iend"])?;
-                m_r =
-                    self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "mend"])?;
-                r_r =
-                    self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "aend"])?;
-                p_r =
-                    self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "chend"])?;
+                // 使用当前扫弦方式的结束位置数据
+                let positions = &pattern.end_positions;
+                h_r = self.get_avatar_nested_field_as_f64_vector(&positions.h_r)?;
+                h_rotation_r =
+                    self.get_avatar_nested_field_as_f64_vector(&positions.h_rotation_r)?;
+                hp_r = self.get_avatar_nested_field_as_f64_vector(&positions.hp_r)?;
+                tp_r = self.get_avatar_nested_field_as_f64_vector(&positions.tp_r)?;
+                t_r = self.get_avatar_nested_field_as_f64_vector(&positions.t_r)?;
+                i_r = self.get_avatar_nested_field_as_f64_vector(&positions.i_r)?;
+                m_r = self.get_avatar_nested_field_as_f64_vector(&positions.m_r)?;
+                r_r = self.get_avatar_nested_field_as_f64_vector(&positions.r_r)?;
+                p_r = self.get_avatar_nested_field_as_f64_vector(&positions.p_r)?;
             } else {
-                h_rotation_r = self.get_avatar_nested_field_as_f64_vector(&[
-                    "ROTATIONS",
-                    "H_rotation_R",
-                    "Normal",
-                    "P0",
-                ])?;
-                h_r = self.get_avatar_nested_field_as_f64_vector(&[
-                    "RIGHT_HAND_POSITIONS",
-                    "Normal_P0_H_R",
-                ])?;
-                hp_r = self.get_avatar_nested_field_as_f64_vector(&[
-                    "RIGHT_HAND_POSITIONS",
-                    "Normal_P0_HP_R",
-                ])?;
-                tp_r =
-                    self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "tp0"])?;
-                t_r =
-                    self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "p0"])?;
-                i_r =
-                    self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "i0"])?;
-                m_r =
-                    self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "m0"])?;
-                r_r =
-                    self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "a0"])?;
-                p_r =
-                    self.get_avatar_nested_field_as_f64_vector(&["RIGHT_HAND_POSITIONS", "ch0"])?;
+                // 使用当前扫弦方式的开始位置数据
+                let positions = &pattern.start_positions;
+                h_r = self.get_avatar_nested_field_as_f64_vector(&positions.h_r)?;
+                h_rotation_r =
+                    self.get_avatar_nested_field_as_f64_vector(&positions.h_rotation_r)?;
+                hp_r = self.get_avatar_nested_field_as_f64_vector(&positions.hp_r)?;
+                tp_r = self.get_avatar_nested_field_as_f64_vector(&positions.tp_r)?;
+                t_r = self.get_avatar_nested_field_as_f64_vector(&positions.t_r)?;
+                i_r = self.get_avatar_nested_field_as_f64_vector(&positions.i_r)?;
+                m_r = self.get_avatar_nested_field_as_f64_vector(&positions.m_r)?;
+                r_r = self.get_avatar_nested_field_as_f64_vector(&positions.r_r)?;
+                p_r = self.get_avatar_nested_field_as_f64_vector(&positions.p_r)?;
             }
         } else {
             let h0 = self.get_avatar_nested_field_as_f64_vector(&[

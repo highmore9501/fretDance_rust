@@ -15,6 +15,7 @@ fn benchmark_update_right_hand_recorder_pool(c: &mut Criterion) {
                 vec![],
                 false,
                 false, // is_playing_bass
+                vec![],
             );
 
             let mut init_right_hand_recorder = RightHandRecorder::new();
