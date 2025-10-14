@@ -1441,10 +1441,13 @@ impl Animator {
                 frame + elapsed_frame
             };
 
+            // 创建一个映射来存储每根弦的最高品级
+            let mut string_fret_map: HashMap<i64, i64> = HashMap::new();
+
             if let Some(fingers) = left_hand.as_array() {
+                // 第一次遍历：确定每根弦的最高品级
                 for finger_data in fingers {
                     let finger_index = finger_data["finger_index"].as_i64().unwrap_or(-1);
-
                     let finger_info = &finger_data["finger_info"];
                     let press_value = match finger_info.get("press").and_then(|v| v.as_str()) {
                         Some(value) => value,
@@ -1467,6 +1470,29 @@ impl Animator {
                         finger_info["fret"].as_i64().unwrap_or(0)
                     };
 
+                    // 处理横按情况
+                    if press == 2 {
+                        // Barre
+                        // 横按影响从当前弦到第0弦的所有弦
+                        for s in 0..=string_index {
+                            let current_fret = string_fret_map.entry(s).or_insert(0);
+                            // 只有当横按的品级更高时才更新
+                            if fret > *current_fret {
+                                *current_fret = fret;
+                            }
+                        }
+                    } else {
+                        // 普通按弦情况
+                        let current_fret = string_fret_map.entry(string_index).or_insert(0);
+                        // 只有当按弦的品级更高时才更新
+                        if fret > *current_fret {
+                            *current_fret = fret;
+                        }
+                    }
+                }
+
+                // 第二次遍历：为每根需要振动的弦生成动画数据
+                for (string_index, fret) in &string_fret_map {
                     let ready = serde_json::json!({
                         "frame": frame - 1.0,
                         "stringIndex": string_index,
@@ -1478,7 +1504,7 @@ impl Animator {
                         "frame": frame,
                         "stringIndex": string_index,
                         "fret": fret,
-                        "influence": 0.5
+                        "influence": 1.0
                     });
 
                     let end = serde_json::json!({
