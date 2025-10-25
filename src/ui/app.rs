@@ -78,7 +78,6 @@ pub struct FretDanceApp {
 
     // 下拉菜单选项
     pub(crate) avatar_options: Vec<String>,
-    pub(crate) midi_options: Vec<String>,
 
     // 控制台输出
     pub(crate) console_output: String,
@@ -139,7 +138,6 @@ impl Clone for FretDanceApp {
             disable_barre: self.disable_barre,
             tuning_presets: self.tuning_presets.clone(),
             avatar_options: self.avatar_options.clone(),
-            midi_options: self.midi_options.clone(),
             console_output: self.console_output.clone(),
             avatar_infos: self.avatar_infos.clone(),
             current_avatar_info: self.current_avatar_info.clone(),
@@ -246,7 +244,6 @@ impl FretDanceApp {
                 },
             ],
             avatar_options: Vec::new(),
-            midi_options: Vec::new(),
             avatar_infos: Vec::new(),
             current_avatar_info: None,
             show_delete_confirmation: false,
@@ -270,7 +267,6 @@ impl FretDanceApp {
         };
 
         app.load_avatar_options();
-        app.load_midi_options();
         app.load_avatar_infos();
 
         app

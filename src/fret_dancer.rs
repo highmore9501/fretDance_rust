@@ -1,5 +1,6 @@
 use serde_json;
 use std::fs::File;
+use std::path::Path;
 use std::sync::mpsc;
 
 use crate::animate::animator::Animator;
@@ -67,14 +68,11 @@ impl FretDancer {
             .ok_or("Avatar info is missing")?;
 
         // 处理文件路径
-        let filename = app
-            .midi_file_path
-            .split("/")
-            .last()
-            .unwrap_or(&app.midi_file_path)
-            .split(".")
-            .next()
-            .unwrap_or("unknown");
+        let filename = Path::new(&app.midi_file_path)
+            .file_stem()
+            .and_then(|name| name.to_str())
+            .unwrap_or("unknown")
+            .to_string();
 
         let track_number_string = track_numbers
             .iter()

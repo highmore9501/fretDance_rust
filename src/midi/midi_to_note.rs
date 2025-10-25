@@ -247,9 +247,11 @@ impl MidiProcessor {
         Ok((tempo_changes, ticks_per_beat))
     }
 
-    pub fn export_midi_info(&self, midi_name: &str) -> Result<String, Box<dyn std::error::Error>> {
-        let midi_file_path = format!("asset/midi/{}.mid", midi_name);
-        let data = std::fs::read(&midi_file_path)?;
+    pub fn export_midi_info(
+        &self,
+        midi_file_path: &str,
+    ) -> Result<String, Box<dyn std::error::Error>> {
+        let data = std::fs::read(midi_file_path)?;
         let smf = Smf::parse(&data)?;
 
         // 写入详细信息到文件

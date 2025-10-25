@@ -34,21 +34,29 @@ pub fn show_midi_info_scan(app: &mut FretDanceApp, ui: &mut egui::Ui) {
                                 .size(16.0),
                         ));
 
-                        egui::ComboBox::from_id_source("midi_scan_select")
-                            .selected_text({
-                                // 显示文件名而不是完整路径
-                                Path::new(&app.midi_file_path)
-                                    .file_name()
-                                    .and_then(|name| name.to_str())
-                                    .unwrap_or(&app.midi_file_path)
-                                    .to_string()
-                            })
-                            .show_ui(ui, |ui| {
-                                for option in &app.midi_options {
-                                    let full_path = format!("asset/midi/{}", option);
-                                    ui.selectable_value(&mut app.midi_file_path, full_path, option);
-                                }
-                            });
+                        // 显示当前选择的MIDI文件名
+                        let midi_filename = Path::new(&app.midi_file_path)
+                            .file_name()
+                            .and_then(|name| name.to_str())
+                            .unwrap_or(&app.midi_file_path)
+                            .to_string();
+
+                        ui.add(egui::Label::new(
+                            egui::RichText::new(&midi_filename).size(14.0),
+                        ));
+
+                        // 文件选择按钮
+                        if ui
+                            .add_sized([100.0, 24.0], egui::Button::new("选择MIDI文件"))
+                            .clicked()
+                        {
+                            if let Some(path) = rfd::FileDialog::new()
+                                .add_filter("MIDI 文件", &["mid", "midi"])
+                                .pick_file()
+                            {
+                                app.midi_file_path = path.display().to_string();
+                            }
+                        }
 
                         if ui
                             .add_sized([80.0, 24.0], egui::Button::new("扫描MIDI信息"))
